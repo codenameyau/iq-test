@@ -10,6 +10,7 @@ import {
   type Session,
 } from './core/engine';
 import { buildReport } from './core/scoring';
+import { sendSubmission } from './core/submit';
 import {
   clearHistory,
   clearSession,
@@ -17,14 +18,13 @@ import {
   loadSeenIds,
   loadSession,
   recordHistory,
-  recordSubmission,
   rememberSeenIds,
   saveSession,
 } from './core/storage';
 import { renderHome } from './ui/home';
 import { renderIntake } from './ui/intake';
 import { renderResults } from './ui/results';
-import { renderActiveItem, renderSectionIntro, type TestView } from './ui/test';
+import { renderActiveItem, renderSectionIntro, totalElapsed, type TestView } from './ui/test';
 
 const root = document.getElementById('app')!;
 const TICK_MS = 250;
@@ -61,11 +61,13 @@ function render(): void {
 
 function showIntake(s: Session): void {
   teardown = renderIntake(root, s, {
-    onSubmit(info) {
+    async onSubmit(info) {
+      const error = await sendSubmission(s.id, info, buildReport({ ...s, participant: info }));
+      if (error) return error;
       setParticipant(s, info);
-      recordSubmission({ ...info, sessionId: s.id, mode: s.mode, fsiq: buildReport(s).fsiq });
       persist();
       render();
+      return null;
     },
   });
 }
@@ -136,13 +138,8 @@ function startClock(s: Session, view: TestView): void {
     const delta = now - last;
     last = now;
     sinceSave += delta;
-    const expired = tick(s, delta);
-    if (expired) {
-      persist();
-      render();
-      return;
-    }
-    view.setRemaining(s.sections[s.sectionIndex].remainingMs);
+    tick(s, delta);
+    view.setElapsed(totalElapsed(s));
     if (sinceSave >= AUTOSAVE_MS) {
       sinceSave = 0;
       persist();

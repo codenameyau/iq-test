@@ -11,7 +11,8 @@ import { brandBar } from './home';
 import { escapeHtml } from './dom';
 
 export interface IntakeHandlers {
-  onSubmit(info: ParticipantInfo): void;
+  /** Resolves to an error message, or null after the submission has been saved. */
+  onSubmit(info: ParticipantInfo): Promise<string | null>;
 }
 
 const FIELDS: { name: ParticipantField; label: string; type: 'text' | 'email' | 'tel' | 'date' | 'country'; hint?: string; autocomplete: string }[] = [
@@ -48,10 +49,7 @@ export function renderIntake(root: HTMLElement, _session: Session, handlers: Int
         <div class="intake-grid">
           ${FIELDS.map((f) => fieldMarkup(f, today, countryOptions)).join('')}
         </div>
-        <p class="intake-privacy">
-          <svg viewBox="0 0 16 16" aria-hidden="true" width="16" height="16"><path d="M8 1l5 2v4c0 3-2 5.5-5 7-3-1.5-5-4-5-7V3l5-2z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
-          This information is saved only on this device. This test has no server, so nothing is sent anywhere unless you add one yourself.
-        </p>
+        <p class="intake-privacy">By submitting, I consent to give my data. Your details, score, and score breakdown are saved. Individual questions and answers are not.</p>
         <div class="start-row">
           <p class="muted small" id="intake-summary"></p>
           <button type="submit" class="btn btn--primary btn--lg" id="intake-submit">See my results</button>
@@ -82,6 +80,7 @@ export function renderIntake(root: HTMLElement, _session: Session, handlers: Int
 
   const updateAge = () => {
     const age = ageFromDob(inputs.get('dob')!.value);
+    summary.classList.remove('intake-error');
     summary.textContent = age !== null && age >= 0 && age <= 120 ? `You are ${age} years old. Your results will be scored for this age.` : '';
   };
 
@@ -94,7 +93,8 @@ export function renderIntake(root: HTMLElement, _session: Session, handlers: Int
     });
   }
 
-  form.addEventListener('submit', (e) => {
+  const submit = form.querySelector<HTMLButtonElement>('#intake-submit')!;
+  form.addEventListener('submit', async (e) => {
     e.preventDefault();
     form.dataset.submitted = 'true';
     const result = validateParticipant(readDraft());
@@ -104,7 +104,15 @@ export function renderIntake(root: HTMLElement, _session: Session, handlers: Int
       if (firstInvalid) inputs.get(firstInvalid.name)!.focus();
       return;
     }
-    handlers.onSubmit(result.values);
+    submit.disabled = true;
+    submit.textContent = 'Saving…';
+    summary.classList.remove('intake-error');
+    const error = await handlers.onSubmit(result.values);
+    if (!error) return;
+    summary.textContent = error;
+    summary.classList.add('intake-error');
+    submit.disabled = false;
+    submit.textContent = 'See my results';
   });
 
   return () => form.replaceWith(form.cloneNode(true));

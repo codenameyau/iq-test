@@ -1,0 +1,14 @@
+# Separate from any other stack. Uses the Postgres named in .env
+# (the database already on this machine), and publishes nothing except
+# the app port on the host network.
+name: iq-test
+
+services:
+  web:
+    build: .
+    image: ${IQ_IMAGE:-iq-test:local}
+    network_mode: host
+    env_file: .env
+    environment:
+      STATIC_DIR: /app/dist
+    restart: unless-stopped

@@ -1,11 +1,9 @@
 import type { ModeId } from './config';
 import type { Session } from './engine';
-import type { ParticipantInfo } from './participant';
 
 const SESSION_KEY = 'iq-test.session.v1';
 const HISTORY_KEY = 'iq-test.history.v1';
 const SEEN_KEY = 'iq-test.seen.v1';
-const SUBMISSIONS_KEY = 'iq-test.submissions.v1';
 const HISTORY_LIMIT = 20;
 const SEEN_LIMIT = 3000;
 
@@ -61,25 +59,6 @@ export function clearHistory(): void {
   } catch {
     // Storage unavailable; nothing to clear.
   }
-}
-
-export interface Submission extends ParticipantInfo {
-  sessionId: string;
-  mode: ModeId;
-  fsiq: number;
-}
-
-/**
- * Appends a completed participant record to a local list. With no backend this is the only
- * place "collected" data lives; swap this for a fetch() to a server to gather results centrally.
- */
-export function recordSubmission(entry: Submission): void {
-  const existing = loadSubmissions().filter((s) => s.sessionId !== entry.sessionId);
-  write(SUBMISSIONS_KEY, [entry, ...existing]);
-}
-
-export function loadSubmissions(): Submission[] {
-  return read<Submission[]>(SUBMISSIONS_KEY) ?? [];
 }
 
 function read<T>(key: string): T | null {

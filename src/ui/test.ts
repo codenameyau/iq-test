@@ -43,7 +43,7 @@ export function renderSectionIntro(root: HTMLElement, session: Session, onStart:
       <p class="lede">${info.description}</p>
       <div class="facts">
         <div><span class="fact-value">${section.items}</span><span class="fact-label">questions</span></div>
-        <div><span class="fact-value">${Math.round(section.seconds / 60)} min</span><span class="fact-label">time limit</span></div>
+        <div><span class="fact-value">~${Math.round(section.seconds / 60)} min</span><span class="fact-label">suggested time</span></div>
         <div><span class="fact-value">Adaptive</span><span class="fact-label">difficulty</span></div>
       </div>
       <ul class="checklist">${SECTION_TIPS[section.domain].map((t) => `<li>${t}</li>`).join('')}</ul>
@@ -58,7 +58,7 @@ export function renderSectionIntro(root: HTMLElement, session: Session, onStart:
       </section>
 
       <div class="start-row">
-        <p class="muted">The timer starts when you press start. You can't go back to earlier questions.</p>
+        <p class="muted">A clock tracks your time, but there's no limit — answer every question. You can't go back to earlier questions.</p>
         <button class="btn btn--primary btn--lg" id="start-section">Start section ${n}</button>
       </div>
     </main>`;
@@ -90,9 +90,14 @@ function showPracticeFeedback(el: HTMLElement, item: Item, response: number | st
 }
 
 export interface TestView {
-  /** Updates the clock without re-rendering the item. */
-  setRemaining(ms: number): void;
+  /** Updates the count-up clock without re-rendering the item. */
+  setElapsed(ms: number): void;
   destroy(): void;
+}
+
+/** Total time spent across all sections so far, for the count-up clock. */
+export function totalElapsed(session: Session): number {
+  return session.sections.reduce((ms, s) => ms + s.elapsedMs, 0);
 }
 
 export function renderActiveItem(root: HTMLElement, session: Session, onAnswer: (response: number | string) => void): TestView {
@@ -104,27 +109,42 @@ export function renderActiveItem(root: HTMLElement, session: Session, onAnswer: 
     ${brandBar(`
       <span class="topbar-section">${info.name}</span>
       <span class="topbar-count">Question ${section.responses.length + 1} of ${section.items}</span>
-      <span class="timer" role="timer" aria-label="Time remaining in this section"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="9" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 6v3l2 1.5M6.5 2h3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span id="clock">${formatClock(section.remainingMs)}</span></span>
+      <span class="timer" role="timer" aria-label="Time elapsed"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="9" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 6v3l2 1.5M6.5 2h3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span id="clock">${formatClock(totalElapsed(session))}</span></span>
     `)}
     ${overallProgress(session)}
-    <main class="page page--test"><div id="item"></div></main>`;
+    <main class="page page--test"><div id="item" class="test-stage"></div></main>`;
 
   const clock = root.querySelector<HTMLElement>('#clock')!;
-  const timer = root.querySelector<HTMLElement>('.timer')!;
-  const cleanup = mountItem(root.querySelector('#item')!, item, { onSubmit: onAnswer });
+  const page = root.querySelector<HTMLElement>('.page--test')!;
+  const topbar = root.querySelector<HTMLElement>('.topbar')!;
+  const progress = root.querySelector<HTMLElement>('.progress')!;
 
-  const setRemaining = (ms: number) => {
-    clock.textContent = formatClock(ms);
-    timer.classList.toggle('timer--low', ms <= 60_000 && ms > 15_000);
-    timer.classList.toggle('timer--critical', ms <= 15_000);
+  // Constrain the stage to the space below the sticky top bar so the question fits without scrolling.
+  const sizeStage = () => {
+    const used = topbar.offsetHeight + progress.offsetHeight;
+    page.style.height = `${Math.max(320, window.innerHeight - used)}px`;
   };
-  setRemaining(section.remainingMs);
-  return { setRemaining, destroy: cleanup };
+  sizeStage();
+  window.addEventListener('resize', sizeStage);
+
+  const cleanup = mountItem(root.querySelector('#item')!, item, { onSubmit: onAnswer, fit: true });
+
+  const setElapsed = (ms: number) => {
+    clock.textContent = formatClock(ms);
+  };
+  setElapsed(totalElapsed(session));
+  return {
+    setElapsed,
+    destroy: () => {
+      window.removeEventListener('resize', sizeStage);
+      cleanup();
+    },
+  };
 }
 
 function overallProgress(session: Session): string {
   const total = session.sections.reduce((n, s) => n + s.items, 0);
-  const done = session.sections.reduce((n, s) => n + s.responses.length + s.notReached, 0);
+  const done = session.sections.reduce((n, s) => n + s.responses.length, 0);
   const pct = Math.round((done / total) * 100);
   return `
     <div class="progress" role="progressbar" aria-label="Overall progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}">

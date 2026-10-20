@@ -134,7 +134,7 @@ export function renderResults(root: HTMLElement, report: Report, handlers: Resul
         <button class="btn btn--ghost" id="print-bottom">Save as PDF</button>
         <button class="btn btn--primary" id="new-test">Take another test</button>
       </div>
-      <p class="footnote">Results are stored only on this device. Generated ${new Date().toLocaleString()}.</p>
+      <p class="footnote">Your details, score, and breakdown were saved. Individual questions stay on this device. Generated ${new Date().toLocaleString()}.</p>
     </main>`;
 
   const print = () => {
@@ -361,7 +361,7 @@ function domainCard(d: DomainScore): string {
       <dl class="kv kv--compact">
         <div><dt>95% range</dt><dd>${d.ciLow}–${d.ciHigh}</dd></div>
         <div><dt>Percentile</dt><dd>${ordinal(d.percentile)}</dd></div>
-        <div><dt>Correct</dt><dd>${d.correct} of ${d.administered}${d.notReached ? ` (${d.notReached} not reached)` : ''}</dd></div>
+        <div><dt>Correct</dt><dd>${d.correct} of ${d.administered}</dd></div>
         <div><dt>Median time per question</dt><dd>${d.medianSeconds.toFixed(1)} s</dd></div>
       </dl>
     </article>`;
@@ -383,8 +383,8 @@ function reviewSections(review: ReviewEntry[]): string {
 }
 
 function reviewEntry(r: ReviewEntry): string {
-  const status = r.response === null ? 'timeout' : r.correct ? 'correct' : 'incorrect';
-  const statusText = { correct: 'Correct', incorrect: 'Incorrect', timeout: 'Time ran out' }[status];
+  const status = r.correct ? 'correct' : 'incorrect';
+  const statusText = { correct: 'Correct', incorrect: 'Incorrect' }[status];
   const item = r.item;
   let body: string;
   if (item.kind === 'choice') {

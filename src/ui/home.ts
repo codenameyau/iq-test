@@ -31,8 +31,7 @@ export function renderHome(
       ${saved ? resumeBanner(saved) : ''}
       <section class="hero">
         <p class="eyebrow">Cognitive Ability Assessment</p>
-        <h1>An adaptive IQ test built on the same principles as professional assessments.</h1>
-        <p class="lede">Five timed sections cover the core abilities measured by tests like the WAIS and Stanford-Binet. Questions adapt to your level as you go, so every answer refines the estimate. Everything runs privately in your browser.</p>
+        <h1>A free adaptive IQ test built on the same principles as professional assessments.</h1>
       </section>
 
       <section class="card mode-picker" aria-labelledby="mode-heading">
@@ -62,11 +61,11 @@ export function renderHome(
         <div class="card">
           <h2 class="card-title">Before you begin</h2>
           <ul class="checklist">
-            <li>Find a quiet place where you won't be interrupted. Each section has its own timer.</li>
+            <li>Find a quiet place where you won't be interrupted. A clock tracks your time, but there's no limit.</li>
             <li>Don't use a calculator, notes, search or another person's help — it would only make the result less accurate.</li>
             <li>Questions get harder or easier based on your answers. Expect to find many of them difficult; that is by design.</li>
             <li>Every test is unique: questions are generated fresh each time and ones you've seen before are avoided, so retakes can't be memorised.</li>
-            <li>If you're unsure, make your best guess. Questions left unanswered when time runs out count as incorrect.</li>
+            <li>Answer every question. If you're unsure, make your best guess — there's no penalty for taking your time.</li>
             <li>There's an untimed practice question before every section, and you can rest between sections.</li>
             <li>Progress is saved on this device automatically. If you reload, you'll resume where you left off.</li>
           </ul>
@@ -76,7 +75,8 @@ export function renderHome(
       ${history.length ? historyCard(history) : ''}
 
       <footer class="footnote">
-        <p>This is a self-administered estimate, not a clinical diagnosis. Item difficulties are calibrated to approximate adult norms (mean 100, SD 15) rather than a professionally standardised sample, so treat the result as a well-informed estimate. No data leaves your device.</p>
+        <p>Five timed sections cover the core abilities measured by tests like the WAIS and Stanford-Binet. Questions adapt to your level as you go, so every answer refines the estimate. The questions run in your browser.</p>
+        <p>This is a self-administered estimate, not a clinical diagnosis. Item difficulties are calibrated to approximate adult norms (mean 100, SD 15) rather than a professionally standardised sample, so treat the result as a well-informed estimate. When you submit, your details, score, and score breakdown are saved. Individual questions and answers are not.</p>
       </footer>
     </main>`;
 
@@ -84,7 +84,7 @@ export function renderHome(
   const updateSummary = () => {
     const sections = sectionsFor(selected, nonverbal);
     const items = sections.reduce((n, s) => n + s.items, 0);
-    summary.textContent = `${MODES[selected].label}: ${sections.length} sections · ${items} questions · ${Math.round(totalSeconds(sections) / 60)} minutes of timed work.`;
+    summary.textContent = `${MODES[selected].label}: ${sections.length} sections · ${items} questions · about ${Math.round(totalSeconds(sections) / 60)} minutes.`;
   };
   updateSummary();
 
@@ -159,7 +159,7 @@ function resumeBanner(session: Session): string {
     <div class="banner">
       <div>
         <strong>You have a test in progress.</strong>
-        <span class="muted">${MODES[session.mode].label} · ${done} of ${total} questions answered · ${escapeHtml(DOMAINS[section.domain].name)} section, ${formatClock(section.remainingMs)} left.</span>
+        <span class="muted">${MODES[session.mode].label} · ${done} of ${total} questions answered · ${escapeHtml(DOMAINS[section.domain].name)} section, ${formatClock(section.elapsedMs)} elapsed.</span>
       </div>
       <div class="banner-actions">
         <button class="btn btn--ghost" id="discard">Discard</button>

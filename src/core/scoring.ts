@@ -1,7 +1,6 @@
 import { DOMAINS, MODES, QUESTION_TYPES, questionTypeOf, type DomainInfo, type ModeId } from './config';
 import {
   guessingFloor,
-  notReachedResponses,
   scoredResponses,
   toScored,
   type ResponseRecord,
@@ -37,7 +36,6 @@ export interface DomainScore {
   percentile: number;
   correct: number;
   administered: number;
-  notReached: number;
   medianSeconds: number;
   /** Relative to the person's own overall level, not to the population. */
   relative: 'strength' | 'weakness' | 'consistent';
@@ -129,7 +127,7 @@ export function buildReport(session: Session): Report {
   let offsetSum = 0;
   let offsetWeight = 0;
   for (const s of session.sections) {
-    const n = s.responses.length + s.notReached;
+    const n = s.responses.length;
     offsetSum += domainOffset(s.domain) * n;
     offsetWeight += n;
   }
@@ -140,7 +138,7 @@ export function buildReport(session: Session): Report {
   const halfWidth = Z95 * overall.se * IQ_SD;
 
   const domains = session.sections.map((section) => {
-    const responses = [...section.responses.map(toScored), ...notReachedResponses(section)];
+    const responses = section.responses.map(toScored);
     const est = estimateAbility(responses, domainPrior(session, section));
     const theta = est.theta - domainOffset(section.domain);
     const iq = toIq(theta);
@@ -148,7 +146,6 @@ export function buildReport(session: Session): Report {
     // Difference is meaningful only when it exceeds the combined measurement error.
     const threshold = Z95 * Math.sqrt(est.se ** 2 + overall.se ** 2) * IQ_SD;
     const diff = iq - fsiq;
-    const answered = section.responses.filter((r) => r.response !== null);
     return {
       domain: section.domain,
       info: DOMAINS[section.domain],
@@ -157,9 +154,8 @@ export function buildReport(session: Session): Report {
       ciHigh: Math.round(iq + half),
       percentile: percentileOf(theta),
       correct: section.responses.filter((r) => r.correct).length,
-      administered: section.responses.length + section.notReached,
-      notReached: section.notReached,
-      medianSeconds: median(answered.map((r) => r.ms / 1000)),
+      administered: section.responses.length,
+      medianSeconds: median(section.responses.map((r) => r.ms / 1000)),
       relative: diff > threshold ? 'strength' : diff < -threshold ? 'weakness' : 'consistent',
     } satisfies DomainScore;
   });
@@ -200,7 +196,7 @@ export function buildReport(session: Session): Report {
     totalCorrect: records.filter((r) => r.correct).length,
     totalAdministered: all.length,
     durationMs: (session.finishedAt ?? Date.now()) - session.startedAt,
-    activeMs: session.sections.reduce((sum, s) => sum + (s.seconds * 1000 - s.remainingMs), 0),
+    activeMs: session.sections.reduce((sum, s) => sum + s.elapsedMs, 0),
     review: session.sections.flatMap((s) =>
       s.responses.map((r, i) => ({ ...r, domain: s.domain, number: i + 1 })),
     ),
@@ -298,19 +294,11 @@ function validityFlags(
       detail: `Some easy items were missed while harder ones were solved (person-fit lz = ${lz.toFixed(2)}). This usually points to lapses of attention, distraction or guessing, so the score is less certain than the interval suggests.`,
     });
   }
-  const notReached = session.sections.reduce((sum, s) => sum + s.notReached, 0);
-  if (notReached > 0) {
-    flags.push({
-      severity: notReached >= 4 ? 'warning' : 'info',
-      title: 'Time ran out',
-      detail: `${notReached} question${notReached === 1 ? ' was' : 's were'} not reached before a section's time limit and ${notReached === 1 ? 'was' : 'were'} scored as incorrect.`,
-    });
-  }
   if (session.focusLosses > 0) {
     flags.push({
       severity: session.focusLosses >= 3 ? 'warning' : 'info',
       title: 'Left the test window',
-      detail: `The test window lost focus ${session.focusLosses} time${session.focusLosses === 1 ? '' : 's'} during timed sections. Interruptions and outside help both make the result less accurate.`,
+      detail: `The test window lost focus ${session.focusLosses} time${session.focusLosses === 1 ? '' : 's'} during the test. Interruptions and outside help both make the result less accurate.`,
     });
   }
   if (session.interruptions > 0) {

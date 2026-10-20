@@ -1,6 +1,6 @@
 # Cognitive Ability Assessment
 
-An adaptive, timed IQ test that runs entirely in the browser. There is no backend: questions are generated on the device, and progress and results are stored in `localStorage`.
+An adaptive IQ test. Questions are generated in the browser, and in-progress answers stay in `localStorage`. Submitting the final form sends your details, overall score, and score breakdown to the server. Individual questions and answers are not sent.
 
 - Three lengths: Quick (20 min), Standard (40 min), Comprehensive (60 min), plus an optional nonverbal version.
 - Five timed sections: Matrix Reasoning, Verbal Reasoning, Spatial Reasoning, Quantitative Reasoning, Working Memory.
@@ -9,23 +9,25 @@ An adaptive, timed IQ test that runs entirely in the browser. There is no backen
 
 ## Run locally
 
-Requires Node 20+.
+Requires Node 20+ and the Postgres already listening on this machine (port 5442).
 
 ```sh
+cp .env.example .env
 npm install
-npm run dev        # http://localhost:5173
-npm test           # unit tests + scoring simulation
+npm run server     # creates the `iq` database if needed, then listens on :3300
+npm run dev        # http://localhost:5173 — proxies /api to that server
+npm test
 ```
 
 `preview.html` (dev server only) shows an item gallery, e.g. `/preview.html?d=spatial`, and a simulated results page, `/preview.html?d=results&theta=1`.
 
-## Deploy
+The same process runs on the home server as its own container, `iq-test-web`, using that machine's Postgres. It does not join any other application's stack. `docker compose up -d --build` from this directory does that when `.env` points at `127.0.0.1:5432/iq`.
 
-```sh
-npm run build      # outputs static files to dist/
-```
+## GitHub
 
-Upload `dist/` to any static host (GitHub Pages, Netlify, Cloudflare Pages, S3). Asset paths are relative, so it also works from a sub-path.
+`.github/workflows/ci.yml` runs the tests and the production build on every pull request and push. A push to `master` also publishes `ghcr.io/codenameyau/iq-test` and rolls that image out over SSH.
+
+The production environment needs `DEPLOY_SSH_HOSTNAME`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, `CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET`, and `DATABASE_URL`.
 
 ## Accuracy caveat
 

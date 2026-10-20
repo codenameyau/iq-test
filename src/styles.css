@@ -211,18 +211,6 @@ code {
   height: 16px;
 }
 
-.timer--low {
-  background: var(--warn-soft);
-  border-color: #fcd34d;
-  color: var(--warn);
-}
-
-.timer--critical {
-  background: var(--bad-soft);
-  border-color: #fca5a5;
-  color: var(--bad);
-}
-
 .progress {
   height: 3px;
   background: var(--border);
@@ -253,9 +241,19 @@ code {
   margin-bottom: var(--s1);
 }
 
+/* Full navbar width; height is set in JS to the space under the sticky bar so nothing scrolls. */
 .page--test {
-  max-width: 960px;
-  padding-top: var(--s6);
+  max-width: 1080px;
+  width: 100%;
+  padding: var(--s4) var(--s5);
+  gap: var(--s3);
+  overflow: hidden;
+}
+
+.test-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
 }
 
 .hero {
@@ -263,7 +261,7 @@ code {
 }
 
 .hero h1 {
-  max-width: 22ch;
+  max-width: none;
   margin-bottom: var(--s4);
 }
 
@@ -302,7 +300,10 @@ code {
 .footnote {
   font-size: 13px;
   color: var(--muted);
-  max-width: 80ch;
+  max-width: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
 }
 
 /* ---------- Buttons & controls ---------- */
@@ -719,6 +720,10 @@ summary:focus-visible {
   color: var(--bad);
 }
 
+.intake-error {
+  color: var(--bad);
+}
+
 .intake-privacy {
   display: flex;
   align-items: flex-start;
@@ -759,12 +764,84 @@ summary:focus-visible {
   gap: var(--s5);
 }
 
+/* Fit mode: fill the stage and scale the question to fit without scrolling. */
+.item--fit {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  gap: var(--s3);
+  justify-content: center;
+}
+
+.item-viewport {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* --unit = 1px here, so SVGs render at their natural viewBox size and the whole block
+   (stimulus + options) is scaled together, preserving their relative sizes. */
+.item-fit {
+  --unit: 1px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s6);
+  transform-origin: center center;
+}
+
+.item-fit--row {
+  flex-direction: row;
+}
+
+.item-fit--col {
+  flex-direction: column;
+}
+
+.item-fit .stimulus-col {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.item-fit .stimulus.visual--svg {
+  width: auto;
+}
+
+.options--fit {
+  grid-template-columns: repeat(var(--opt-cols, 2), auto);
+  width: auto;
+  max-width: none;
+  gap: var(--s3);
+}
+
+/* In fit mode SVGs render at natural size; the block transform handles fitting. */
+.item-fit .stimulus.visual--svg svg,
+.item-fit .option-figure svg {
+  max-width: none;
+}
+
+.item-fit .option-figure {
+  width: auto;
+}
+
+.item--recall.item--fit {
+  justify-content: center;
+  align-items: center;
+}
+
 .item-prompt {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
   text-align: center;
   max-width: 60ch;
+  flex: none;
 }
 
 .visual--svg svg {
@@ -921,6 +998,7 @@ summary:focus-visible {
   gap: var(--s4);
   width: 100%;
   max-width: 720px;
+  flex: none;
 }
 
 .hint {

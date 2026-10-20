@@ -1,0 +1,288 @@
+import { describe, expect, it } from 'vitest';
+import { createRng } from '../core/rng';
+import {
+  entityMetrics,
+  generateMatrices,
+  matricesGenerator,
+  panelSatisfiesRules,
+  panelSignature,
+} from './matrices';
+
+const LEVEL_B = [-2.4, -1.8, -1.1, -0.5, 0.1, 0.6, 1.2, 1.7, 2.2, 2.7];
+
+function nearestDistance(target: number): number {
+  return Math.min(...LEVEL_B.map((b) => Math.abs(b - target)));
+}
+
+function attributeAt(
+  panel: ReturnType<typeof generateMatrices>['context'][number][number],
+  component: string,
+  attr: string,
+): number {
+  const fig = panel.kind === 'lines'
+    ? panel.accent
+    : component === 'inner' || component === 'right'
+      ? panel.inner
+      : panel.outer;
+  if (!fig) return -1;
+  if (attr === 'shape') return ['triangle', 'square', 'pentagon', 'hexagon', 'circle'].indexOf(fig.shape);
+  if (attr === 'size') return fig.size;
+  if (attr === 'fill') return fig.fill;
+  if (attr === 'count') return fig.count;
+  return fig.rotation;
+}
+
+function sentenceCount(text: string): number {
+  return text.split(/[.!?]+/).filter((part) => part.trim().length > 0).length;
+}
+
+/** Option that shares the most attribute values with the other options. Ties keep the lowest index. */
+function agreementPick(vectors: string[][]): number {
+  let best = 0;
+  let bestScore = -1;
+  for (let i = 0; i < vectors.length; i++) {
+    let score = 0;
+    for (let dim = 0; dim < vectors[i].length; dim++) {
+      for (let j = 0; j < vectors.length; j++) {
+        if (j !== i && vectors[j][dim] === vectors[i][dim]) score++;
+      }
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      best = i;
+    }
+  }
+  return best;
+}
+
+describe('matrices generator', () => {
+  it('exposes the matrices domain', () => {
+    expect(matricesGenerator.domain).toBe('matrices');
+  });
+
+  it('is deterministic for the same seed, target, and used ids', () => {
+    const used = new Set<string>(['mx-occupied']);
+    for (const seed of [1, 7, 42, 99, 1000, 20241020]) {
+      for (const target of [-2, 0, 1.4, 2.2]) {
+        const a = matricesGenerator.generate(createRng(seed), target, used);
+        const b = matricesGenerator.generate(createRng(seed), target, used);
+        expect(a).toEqual(b);
+      }
+    }
+  });
+
+  it('returns a level difficulty near the target', () => {
+    for (const target of [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5]) {
+      for (const seed of [1, 8, 21]) {
+        const item = matricesGenerator.generate(createRng(seed), target, new Set());
+        expect(LEVEL_B.some((b) => Math.abs(b - item.b) < 1e-9)).toBe(true);
+        expect(Math.abs(item.b - target)).toBeLessThanOrEqual(nearestDistance(target) + 0.11);
+        expect(Math.abs(item.b - target)).toBeLessThanOrEqual(0.6 + 1e-9);
+        expect(item.a).toBeGreaterThanOrEqual(1.4);
+        expect(item.a).toBeLessThanOrEqual(1.8);
+      }
+    }
+  });
+
+  it('builds a choice item whose options are distinct panels', () => {
+    const sample = generateMatrices(createRng(3), 0, new Set());
+    const { item } = sample;
+    expect(item.kind).toBe('choice');
+    expect(item.domain).toBe('matrices');
+    expect(item.prompt).toBe('Which option completes the pattern?');
+    expect(item.answer).toBeGreaterThanOrEqual(0);
+    expect(item.answer).toBeLessThan(8);
+    expect(item.options).toHaveLength(8);
+    expect(sentenceCount(item.explanation)).toBeGreaterThanOrEqual(1);
+    expect(sentenceCount(item.explanation)).toBeLessThanOrEqual(3);
+
+    expect(item.stimulus.type).toBe('svg');
+    if (item.stimulus.type !== 'svg') return;
+    expect(item.stimulus.svg.startsWith('<svg')).toBe(true);
+    expect(item.stimulus.svg).toContain('xmlns="http://www.w3.org/2000/svg"');
+    expect(item.stimulus.svg).toContain('viewBox="0 0 330 330"');
+    expect(item.stimulus.svg).not.toMatch(/<svg[^>]*\s(?:width|height)=/);
+    expect(item.stimulus.svg).toContain('>?</text>');
+
+    const svgs: string[] = [];
+    for (const option of item.options) {
+      expect(option.type).toBe('svg');
+      if (option.type !== 'svg') continue;
+      expect(option.svg.startsWith('<svg')).toBe(true);
+      expect(option.svg).toContain('viewBox="0 0 100 100"');
+      expect(option.svg).not.toMatch(/<svg[^>]*\s(?:width|height)=/);
+      expect(option.svg).not.toContain('?</text>');
+      svgs.push(option.svg);
+    }
+    expect(new Set(svgs).size).toBe(8);
+    expect(new Set(sample.optionSignatures).size).toBe(8);
+    expect(sample.optionSignatures[item.answer]).toBe(panelSignature(sample.context[2][2]));
+  });
+
+  it('bisects each modified attribute across the eight options', () => {
+    const rng = createRng(11);
+    for (let i = 0; i < 30; i++) {
+      const sample = generateMatrices(rng, LEVEL_B[i % LEVEL_B.length], new Set());
+      expect(sample.optionVectors).toHaveLength(8);
+      const dims = sample.optionVectors[0]?.length ?? 0;
+      expect(dims).toBe(3);
+      for (let dim = 0; dim < dims; dim++) {
+        const counts = new Map<string, number>();
+        for (const vector of sample.optionVectors) {
+          const value = vector[dim];
+          counts.set(value, (counts.get(value) ?? 0) + 1);
+        }
+        expect(counts.size).toBe(2);
+        for (const count of counts.values()) expect(count).toBe(4);
+      }
+    }
+  });
+
+  it('does not repeat ids while usedIds accumulates', () => {
+    const used = new Set<string>();
+    const rng = createRng(123);
+    for (let i = 0; i < 40; i++) {
+      const item = matricesGenerator.generate(rng, 0.1, used);
+      expect(used.has(item.id)).toBe(false);
+      expect(item.id.startsWith('mx-')).toBe(true);
+      used.add(item.id);
+    }
+    expect(used.size).toBe(40);
+  });
+
+  it('keeps the correct panel from being voted out of the options', () => {
+    const rng = createRng(999);
+    let hits = 0;
+    for (let i = 0; i < 300; i++) {
+      const sample = generateMatrices(rng, LEVEL_B[i % LEVEL_B.length], new Set());
+      if (agreementPick(sample.optionVectors) === sample.item.answer) hits++;
+    }
+    expect(hits / 300).toBeLessThan(0.35);
+  });
+
+  it('accepts only the correct option under the row rules', () => {
+    const rng = createRng(2024);
+    for (let i = 0; i < 80; i++) {
+      const sample = generateMatrices(rng, LEVEL_B[i % LEVEL_B.length], new Set());
+      for (let option = 0; option < sample.options.length; option++) {
+        const holds = panelSatisfiesRules(sample.options[option], sample.context, sample.rules);
+        expect(holds).toBe(option === sample.item.answer);
+      }
+    }
+  });
+
+  it('tags each item with the family that matches its construction', () => {
+    const families = ['mx-attribute', 'mx-overlay', 'mx-composite'];
+    const rng = createRng(17);
+    const seen = new Set<string>();
+    for (let i = 0; i < 80; i++) {
+      const sample = generateMatrices(rng, LEVEL_B[i % LEVEL_B.length], new Set());
+      const panel = sample.context[0][0];
+      const constructed = panel.kind === 'lines' ? 'mx-overlay' : panel.layout === 'single' ? 'mx-attribute' : 'mx-composite';
+      expect(families).toContain(sample.item.family);
+      expect(sample.item.family).toBe(constructed);
+      seen.add(sample.item.family ?? '');
+      const level = Number(sample.item.id.split('-')[1]);
+      if (level <= 5 || level === 7) expect(sample.item.family).toBe('mx-attribute');
+      if (level === 6) expect(sample.item.family).toBe('mx-overlay');
+      if (level === 8 || level === 10) expect(sample.item.family).toBe('mx-composite');
+    }
+    expect([...seen].sort()).toEqual([...families].sort());
+    expect(matricesGenerator.practice().family).toBe('mx-attribute');
+  });
+
+  it('keeps every entity large enough to tell shape, fill, and size apart', () => {
+    const rng = createRng(404);
+    let sawSizeSteps = false;
+    const check = (panels: Parameters<typeof entityMetrics>[0][]) => {
+      const diameters = new Map<string, Map<number, number>>();
+      const shapes = new Map<string, Set<string>>();
+      const fills = new Map<string, Set<number>>();
+      for (const panel of panels) {
+        for (const entity of entityMetrics(panel)) {
+          expect(entity.diameter).toBeGreaterThanOrEqual(11);
+          const known = diameters.get(entity.placement) ?? new Map<number, number>();
+          const prior = known.get(entity.size);
+          if (prior === undefined) known.set(entity.size, entity.diameter);
+          else expect(prior).toBeCloseTo(entity.diameter, 6);
+          diameters.set(entity.placement, known);
+          const shapeSet = shapes.get(entity.placement) ?? new Set<string>();
+          shapeSet.add(entity.shape);
+          shapes.set(entity.placement, shapeSet);
+          const fillSet = fills.get(entity.placement) ?? new Set<number>();
+          fillSet.add(entity.fill);
+          fills.set(entity.placement, fillSet);
+        }
+      }
+      for (const [placement, sizes] of diameters) {
+        const discriminate = (shapes.get(placement)?.size ?? 0) > 1 || (fills.get(placement)?.size ?? 0) > 1;
+        const ordered = [...sizes.entries()].sort((a, b) => a[0] - b[0]);
+        for (const [, diameter] of ordered) {
+          if (discriminate) expect(diameter).toBeGreaterThanOrEqual(16);
+        }
+        for (let index = 1; index < ordered.length; index++) {
+          sawSizeSteps = true;
+          expect(ordered[index][1] / ordered[index - 1][1]).toBeGreaterThanOrEqual(1.4);
+        }
+      }
+    };
+    for (let i = 0; i < 500; i++) {
+      const sample = generateMatrices(rng, LEVEL_B[i % LEVEL_B.length], new Set());
+      check([...sample.context.flat(), ...sample.options]);
+    }
+    expect(sawSizeSteps).toBe(true);
+  });
+
+  it('uses three distinct row values, and draws high counts large enough to tell shapes apart', () => {
+    const rng = createRng(5150);
+    let sawConstant = false;
+    let sawCrowdedShapes = false;
+    for (let i = 0; i < 160; i++) {
+      const sample = generateMatrices(rng, LEVEL_B[i % LEVEL_B.length], new Set());
+      for (const rule of sample.rules) {
+        if (rule.kind !== 'constant') continue;
+        sawConstant = true;
+        const values = [0, 1, 2].map((row) => attributeAt(sample.context[row][0], rule.component, rule.attr));
+        expect(new Set(values).size).toBe(3);
+        for (const matrixRow of sample.context) {
+          const across = [0, 1, 2].map((col) => attributeAt(matrixRow[col], rule.component, rule.attr));
+          expect(new Set(across).size).toBe(1);
+        }
+      }
+      if (sample.item.explanation.includes('changes from row to row')) {
+        expect(sample.rules.some((rule) => rule.kind === 'constant')).toBe(true);
+      }
+      const panels = [...sample.context.flat(), ...sample.options];
+      const shapes = new Set<string>();
+      for (const panel of panels) {
+        if (panel.kind === 'figure' && panel.layout === 'single') shapes.add(panel.outer.shape);
+      }
+      if (shapes.size < 2) continue;
+      for (const panel of panels) {
+        if (panel.kind !== 'figure' || panel.layout !== 'single' || panel.outer.count < 5) continue;
+        sawCrowdedShapes = true;
+        expect(entityMetrics(panel)[0]?.diameter ?? 0).toBeGreaterThanOrEqual(20);
+      }
+    }
+    expect(sawConstant).toBe(true);
+    expect(sawCrowdedShapes).toBe(true);
+  });
+
+  it('returns one fixed easy practice item', () => {
+    const a = matricesGenerator.practice();
+    const b = matricesGenerator.practice();
+    expect(a).toEqual(b);
+    expect(a.kind).toBe('choice');
+    expect(a.domain).toBe('matrices');
+    expect(a.b).toBe(-2.5);
+    expect(a.a).toBeGreaterThanOrEqual(1.4);
+    expect(a.a).toBeLessThanOrEqual(1.8);
+    expect(a.prompt).toBe('Which option completes the pattern?');
+    if (a.kind === 'choice') {
+      expect(a.answer).toBeGreaterThanOrEqual(0);
+      expect(a.answer).toBeLessThan(8);
+      expect(a.options).toHaveLength(8);
+      expect(a.stimulus.type).toBe('svg');
+    }
+  });
+});

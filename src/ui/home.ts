@@ -76,7 +76,7 @@ export function renderHome(
 
       <footer class="footnote">
         <p>Five timed sections cover the core abilities measured by tests like the WAIS and Stanford-Binet. Questions adapt to your level as you go, so every answer refines the estimate. The questions run in your browser.</p>
-        <p>This is a self-administered estimate, not a clinical diagnosis. Item difficulties are calibrated to approximate adult norms (mean 100, SD 15) rather than a professionally standardised sample, so treat the result as a well-informed estimate. When you submit, your details, score, and score breakdown are saved. Individual questions and answers are not.</p>
+        <p>This is a free, self-administered estimate, not a clinical diagnosis. Item difficulties are calibrated to approximate adult norms (mean 100, SD 15) rather than a professionally standardised sample, so treat the result as a well-informed estimate. The test runs entirely in your browser. Nothing is sent to a server.</p>
       </footer>
     </main>`;
 

@@ -5,29 +5,6 @@ import { brandBar } from './home';
 import { escapeHtml, formatClock, letter } from './dom';
 import { mountItem } from './item';
 
-const SECTION_TIPS: Record<string, string[]> = {
-  matrices: [
-    'Look across rows and down columns. Each attribute — shape, number, shading, size, orientation — can follow its own rule.',
-    'Work out what the missing panel must look like before comparing the options.',
-  ],
-  verbal: [
-    'Choose the best answer, not just one that could work. For similarities, the most general shared property wins.',
-    'For logic questions, rely only on the statements given, not on what is true in real life.',
-  ],
-  spatial: [
-    'Rotated shapes are allowed; mirror images are not the same shape.',
-    'Read the instructions in each question carefully — operation order matters.',
-  ],
-  series: [
-    'Write nothing down — but do look at the differences between neighbouring numbers, and at every second number.',
-    'Some questions are number grids: each row follows the same rule.',
-  ],
-  memory: [
-    'Items appear one at a time, about one per second. Your answer box appears after the last item.',
-    'You can\'t replay the sequence, so give it your full attention.',
-  ],
-};
-
 export function renderSectionIntro(root: HTMLElement, session: Session, onStart: () => void): () => void {
   const section = currentSection(session);
   const info = DOMAINS[section.domain];
@@ -40,13 +17,11 @@ export function renderSectionIntro(root: HTMLElement, session: Session, onStart:
     <main class="page page--narrow">
       <p class="eyebrow">Section ${n} of ${session.sections.length}</p>
       <h1>${info.name}</h1>
-      <p class="lede">${info.description}</p>
       <div class="facts">
         <div><span class="fact-value">${section.items}</span><span class="fact-label">questions</span></div>
         <div><span class="fact-value">~${Math.round(section.seconds / 60)} min</span><span class="fact-label">suggested time</span></div>
         <div><span class="fact-value">Adaptive</span><span class="fact-label">difficulty</span></div>
       </div>
-      <ul class="checklist">${SECTION_TIPS[section.domain].map((t) => `<li>${t}</li>`).join('')}</ul>
 
       <section class="card practice" aria-labelledby="practice-title">
         <div class="card-head">
@@ -65,7 +40,6 @@ export function renderSectionIntro(root: HTMLElement, session: Session, onStart:
 
   const feedback = root.querySelector<HTMLElement>('#practice-feedback')!;
   let cleanup = mountItem(root.querySelector('#practice-item')!, practice, {
-    submitLabel: 'Check answer',
     onSubmit: (response) => {
       cleanup();
       showPracticeFeedback(feedback, practice, response);

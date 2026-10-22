@@ -1,11 +1,19 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  // Relative base so the built site works from any static host or sub-path.
+  // Relative paths, then inlined into one file so dist/index.html opens on its own.
   base: './',
-  server: {
-    proxy: {
-      '/api': 'http://127.0.0.1:3300',
+  build: {
+    cssCodeSplit: false,
+    modulePreload: false,
+    assetsInlineLimit: 100_000_000,
+    rollupOptions: {
+      output: {
+        inlineDynamicImports: true,
+        format: 'iife',
+        entryFileNames: 'app.js',
+        assetFileNames: 'app.[ext]',
+      },
     },
   },
 });

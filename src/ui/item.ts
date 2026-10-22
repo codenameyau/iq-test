@@ -1,5 +1,5 @@
 import type { ChoiceItem, Item, RecallItem } from '../core/types';
-import { escapeHtml, letter, renderVisual, svgScaleStyle } from './dom';
+import { escapeHtml, letter, renderVisual, svgCellSize, svgScaleStyle } from './dom';
 
 export interface ItemViewOptions {
   onSubmit(response: number | string): void;
@@ -15,9 +15,11 @@ export function mountItem(container: HTMLElement, item: Item, options: ItemViewO
     : mountRecall(container, item, options);
 }
 
-function mountChoice(container: HTMLElement, item: ChoiceItem, { onSubmit, submitLabel = 'Next', fit = false }: ItemViewOptions): () => void {
+function mountChoice(container: HTMLElement, item: ChoiceItem, { onSubmit, fit = false }: ItemViewOptions): () => void {
   const textOptions = item.options.every((o) => o.type === 'text');
   const longText = textOptions && item.options.some((o) => o.type === 'text' && o.text.length > 14);
+  const cell = textOptions && item.stimulus.type === 'svg' ? svgCellSize(item.stimulus.svg) : null;
+  const cellStyle = cell ? ` style="--vw:${cell.w};--vh:${cell.h}"` : '';
   const layout = longText ? 'list' : `grid-${item.options.length <= 4 ? item.options.length : item.options.length === 5 ? 5 : item.options.length === 6 ? 3 : 4}`;
   const isText = item.stimulus.type === 'text';
 
@@ -25,17 +27,12 @@ function mountChoice(container: HTMLElement, item: ChoiceItem, { onSubmit, submi
   const optionsHtml = item.options
     .map(
       (opt, i) => `
-            <button type="button" class="option ${opt.type === 'text' ? 'option--text' : 'option--svg'}" role="radio" aria-checked="false" data-index="${i}" aria-label="Option ${letter(i)}${opt.type === 'text' ? `: ${escapeHtml(opt.text)}` : ''}">
+            <button type="button" class="option ${opt.type === 'text' ? 'option--text' : 'option--svg'}${cell ? ' option--cell' : ''}" role="radio" aria-checked="false" data-index="${i}" aria-label="Option ${letter(i)}${opt.type === 'text' ? `: ${escapeHtml(opt.text)}` : ''}"${cellStyle}>
               <span class="option-key" aria-hidden="true">${letter(i)}</span>
               ${opt.type === 'text' ? `<span class="option-text">${escapeHtml(opt.text)}</span>` : `<span class="option-figure" style="${svgScaleStyle(opt.svg)}">${opt.svg}</span>`}
             </button>`,
     )
     .join('');
-  const actionsHtml = `
-      <div class="item-actions">
-        <span class="hint">Choose with <kbd>${letter(0)}</kbd>–<kbd>${letter(item.options.length - 1)}</kbd> or <kbd>1</kbd>–<kbd>${item.options.length}</kbd>, confirm with <kbd>Enter</kbd></span>
-        <button type="button" class="btn btn--primary" id="submit" disabled>${escapeHtml(submitLabel)}</button>
-      </div>`;
 
   if (fit) {
     container.innerHTML = `
@@ -47,7 +44,6 @@ function mountChoice(container: HTMLElement, item: ChoiceItem, { onSubmit, submi
           <div class="options options--fit" role="radiogroup" aria-labelledby="item-prompt">${optionsHtml}</div>
         </div>
       </div>
-      ${actionsHtml}
     </div>`;
   } else {
     container.innerHTML = `
@@ -55,53 +51,36 @@ function mountChoice(container: HTMLElement, item: ChoiceItem, { onSubmit, submi
       <p class="item-prompt" id="item-prompt">${escapeHtml(item.prompt)}</p>
       ${stimulusHtml}
       <div class="options options--${layout}" role="radiogroup" aria-labelledby="item-prompt">${optionsHtml}</div>
-      ${actionsHtml}
     </div>`;
   }
 
   const fitCleanup = fit ? fitChoiceToViewport(container, item, textOptions, longText) : null;
 
   const buttons = Array.from(container.querySelectorAll<HTMLButtonElement>('.option'));
-  const submit = container.querySelector<HTMLButtonElement>('#submit')!;
-  let selected: number | null = null;
   let submitted = false;
 
-  const select = (index: number) => {
-    selected = index;
+  const confirm = (index: number) => {
+    if (submitted) return;
+    submitted = true;
     buttons.forEach((b, i) => {
       b.classList.toggle('is-selected', i === index);
       b.setAttribute('aria-checked', String(i === index));
+      b.disabled = true;
     });
-    submit.disabled = false;
-  };
-  const confirm = () => {
-    if (selected === null || submitted) return;
-    submitted = true;
-    onSubmit(selected);
+    onSubmit(index);
   };
 
-  buttons.forEach((b, i) => {
-    b.addEventListener('click', () => select(i));
-    b.addEventListener('dblclick', () => {
-      select(i);
-      confirm();
-    });
-  });
-  submit.addEventListener('click', confirm);
+  buttons.forEach((b, i) => b.addEventListener('click', () => confirm(i)));
 
   const onKey = (e: KeyboardEvent) => {
-    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (submitted || e.metaKey || e.ctrlKey || e.altKey) return;
     const key = e.key.toUpperCase();
     const byLetter = key.length === 1 ? key.charCodeAt(0) - 65 : -1;
     const byDigit = /^[1-9]$/.test(key) ? Number(key) - 1 : -1;
     const index = byLetter >= 0 && byLetter < buttons.length ? byLetter : byDigit;
     if (index >= 0 && index < buttons.length) {
       e.preventDefault();
-      select(index);
-      buttons[index].focus();
-    } else if (e.key === 'Enter' && selected !== null) {
-      e.preventDefault();
-      confirm();
+      confirm(index);
     }
   };
   document.addEventListener('keydown', onKey);

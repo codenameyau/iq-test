@@ -25,6 +25,23 @@ export function svgScaleStyle(svg: string): string {
   return match ? `--vw:${match[1]};--vh:${match[2]}` : '';
 }
 
+/** Size of one box inside a grid figure, when that figure is built from smaller boxes. */
+export function svgCellSize(svg: string): { w: number; h: number } | null {
+  const view = svg.match(/viewBox="[\d.-]+\s+[\d.-]+\s+([\d.]+)\s+([\d.]+)"/);
+  if (!view) return null;
+  const viewW = Number(view[1]);
+  const viewH = Number(view[2]);
+  for (const rect of svg.matchAll(/<rect\b([^>]*)>/g)) {
+    const w = rect[1].match(/\bwidth="([\d.]+)"/);
+    const h = rect[1].match(/\bheight="([\d.]+)"/);
+    if (!w || !h) continue;
+    const width = Number(w[1]);
+    const height = Number(h[1]);
+    if (width > 0 && height > 0 && width < viewW - 1 && height < viewH - 1) return { w: width, h: height };
+  }
+  return null;
+}
+
 export function formatClock(ms: number): string {
   const total = Math.max(0, Math.ceil(ms / 1000));
   const m = Math.floor(total / 60);

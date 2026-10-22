@@ -2,7 +2,6 @@ import './styles.css';
 import {
   createSession,
   resumeAfterReload,
-  setParticipant,
   shownItemIds,
   startSection,
   submitAnswer,
@@ -10,7 +9,6 @@ import {
   type Session,
 } from './core/engine';
 import { buildReport } from './core/scoring';
-import { sendSubmission } from './core/submit';
 import {
   clearHistory,
   clearSession,
@@ -22,7 +20,6 @@ import {
   saveSession,
 } from './core/storage';
 import { renderHome } from './ui/home';
-import { renderIntake } from './ui/intake';
 import { renderResults } from './ui/results';
 import { renderActiveItem, renderSectionIntro, totalElapsed, type TestView } from './ui/test';
 
@@ -53,23 +50,9 @@ function render(): void {
       showActiveItem(session);
       break;
     case 'done':
-      if (!session.participant) showIntake(session);
-      else showResults(session);
+      showResults(session);
       break;
   }
-}
-
-function showIntake(s: Session): void {
-  teardown = renderIntake(root, s, {
-    async onSubmit(info) {
-      const error = await sendSubmission(s.id, info, buildReport({ ...s, participant: info }));
-      if (error) return error;
-      setParticipant(s, info);
-      persist();
-      render();
-      return null;
-    },
-  });
 }
 
 function showHome(): void {

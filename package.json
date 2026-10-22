@@ -5,11 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "server": "node --env-file-if-exists=.env --experimental-strip-types server/index.ts",
-    "build": "tsc --noEmit && tsc -p server/tsconfig.json --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && node scripts/inline-html.mjs",
     "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit && tsc -p server/tsconfig.json --noEmit"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "pg": "^8.16.0"

@@ -57,16 +57,21 @@ CREATE INDEX IF NOT EXISTS submissions_email_idx ON submissions (email);
 
 const hits = new Map<string, number[]>();
 
+/** Read-only check. A hit is only recorded once a new submission is actually stored, so
+ *  failed attempts and retries of the same finished test never exhaust a visitor's budget. */
 function limited(ip: string): boolean {
   const now = Date.now();
   const recent = (hits.get(ip) ?? []).filter((t) => now - t < WINDOW_MS);
-  if (recent.length >= MAX_PER_WINDOW) {
-    hits.set(ip, recent);
-    return true;
-  }
+  if (recent.length === 0) hits.delete(ip);
+  else hits.set(ip, recent);
+  return recent.length >= MAX_PER_WINDOW;
+}
+
+function recordHit(ip: string): void {
+  const now = Date.now();
+  const recent = (hits.get(ip) ?? []).filter((t) => now - t < WINDOW_MS);
   recent.push(now);
   hits.set(ip, recent);
-  return false;
 }
 
 function send(res: ServerResponse, status: number, body: unknown): void {
@@ -153,7 +158,8 @@ const server = createServer(async (req, res) => {
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/submissions') {
-      if (limited(clientIp(req))) {
+      const ip = clientIp(req);
+      if (limited(ip)) {
         send(res, 429, { error: 'Too many submissions. Try again later.' });
         return;
       }
@@ -174,7 +180,8 @@ const server = createServer(async (req, res) => {
         send(res, 400, { error: result.error });
         return;
       }
-      await insertSubmission(result.value);
+      const stored = await insertSubmission(result.value);
+      if (stored === 'created') recordHit(ip);
       send(res, 200, { ok: true });
       return;
     }

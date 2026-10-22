@@ -116,7 +116,7 @@ export function renderHome(
   });
 }
 
-export function brandBar(right = ''): string {
+export function brandBar(right = '', middle = ''): string {
   return `
     <header class="topbar">
       <div class="topbar-inner">
@@ -124,7 +124,8 @@ export function brandBar(right = ''): string {
           <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="currentColor"/><path d="M9 22l7-12 7 12z" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/></svg>
           <span>Free IQ Test</span>
         </a>
-        <div class="topbar-right">${right}</div>
+        ${middle}
+        ${right ? `<div class="topbar-right">${right}</div>` : ''}
       </div>
     </header>`;
 }

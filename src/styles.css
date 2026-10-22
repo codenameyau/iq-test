@@ -601,29 +601,56 @@ summary:focus-visible {
 
 /* ---------- Section intro ---------- */
 
-.facts {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--s3);
-}
-
-.facts > div {
+/* Sits over the top bar on a wide screen. On a phone it is taken out of that bar
+   (see the 600px query) because the top bar's blur would trap a fixed child. */
+.preview-nav {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 11;
   display: flex;
-  flex-direction: column;
-  padding: var(--s4);
-  border-radius: var(--r);
-  background: var(--surface);
-  border: 1px solid var(--border);
+  justify-content: center;
+  pointer-events: none;
 }
 
-.fact-value {
-  font-size: 22px;
-  font-weight: 700;
+.preview-nav-inner {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--s4);
+  width: min(1080px, 100%);
+  min-height: 60px;
+  padding: var(--s3) var(--s5);
+  pointer-events: none;
 }
 
-.fact-label {
-  font-size: 13px;
-  color: var(--muted);
+.preview-nav-inner > * {
+  pointer-events: auto;
+}
+
+.preview-label {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.topbar .section-line {
+  flex: 1;
+  min-width: 0;
+  margin: 0 0 0 var(--s4);
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.page--test > #practice-feedback {
+  flex: none;
+  margin: 0;
+  max-height: 4.8em;
+  overflow: auto;
 }
 
 .feedback {
@@ -904,10 +931,6 @@ summary:focus-visible {
   max-width: 100%;
   white-space: pre-line;
   font-variant-numeric: tabular-nums;
-}
-
-.practice .stimulus--text {
-  background: var(--bg);
 }
 
 .options {
@@ -1685,11 +1708,31 @@ summary:focus-visible {
   .topbar-inner { padding: var(--s2) var(--s4); }
   .brand span,
   .topbar-count { display: none; }
+  .preview-nav {
+    position: fixed;
+    top: auto;
+    bottom: 0;
+    z-index: 20;
+    justify-content: stretch;
+    pointer-events: auto;
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: saturate(180%) blur(8px);
+    border-top: 1px solid var(--border);
+  }
+  .preview-nav-inner {
+    width: 100%;
+    min-height: 0;
+    justify-content: space-between;
+    gap: var(--s3);
+    padding: var(--s3) var(--s4) calc(var(--s3) + env(safe-area-inset-bottom, 0px));
+  }
+  .preview-nav .btn {
+    flex: 1;
+  }
   .options--grid-4,
   .options--grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .start-row,
   .banner { flex-direction: column; align-items: stretch; }
-  .facts { grid-template-columns: 1fr; }
   .score-stats { gap: var(--s4); flex-wrap: wrap; }
 }
 

@@ -1,4 +1,4 @@
-import { DOMAINS, MODES } from '../core/config';
+import { DOMAINS } from '../core/config';
 import { currentSection, GENERATORS, isCorrect, type Session } from '../core/engine';
 import type { Item } from '../core/types';
 import { brandBar } from './home';
@@ -12,44 +12,53 @@ export function renderSectionIntro(root: HTMLElement, session: Session, onStart:
   const n = session.sectionIndex + 1;
 
   root.innerHTML = `
-    ${brandBar(`<span class="muted">${MODES[session.mode].label} test</span>`)}
+    ${brandBar('', `<h1 class="section-line">Section ${n} of ${session.sections.length} · ${escapeHtml(info.name)}</h1>`)}
+    <nav class="preview-nav" aria-label="Practice">
+      <div class="preview-nav-inner">
+        <span class="preview-label">Practice question</span>
+        <button class="btn btn--primary" id="start-section">Start section ${n}</button>
+      </div>
+    </nav>
     ${overallProgress(session)}
-    <main class="page page--narrow">
-      <p class="eyebrow">Section ${n} of ${session.sections.length}</p>
-      <h1>${info.name}</h1>
-      <div class="facts">
-        <div><span class="fact-value">${section.items}</span><span class="fact-label">questions</span></div>
-        <div><span class="fact-value">~${Math.round(section.seconds / 60)} min</span><span class="fact-label">suggested time</span></div>
-        <div><span class="fact-value">Adaptive</span><span class="fact-label">difficulty</span></div>
-      </div>
-
-      <section class="card practice" aria-labelledby="practice-title">
-        <div class="card-head">
-          <h2 class="card-title" id="practice-title">Practice question</h2>
-          <span class="badge badge--muted">Untimed · not scored</span>
-        </div>
-        <div id="practice-item"></div>
-        <div id="practice-feedback" hidden></div>
-      </section>
-
-      <div class="start-row">
-        <p class="muted">A clock tracks your time, but there's no limit — answer every question. You can't go back to earlier questions.</p>
-        <button class="btn btn--primary btn--lg" id="start-section">Start section ${n}</button>
-      </div>
+    <main class="page page--test">
+      <div id="practice-item" class="test-stage"></div>
+      <div id="practice-feedback" hidden></div>
     </main>`;
+
+  const page = root.querySelector<HTMLElement>('.page--test')!;
+  const topbar = root.querySelector<HTMLElement>('.topbar')!;
+  const topbarInner = root.querySelector<HTMLElement>('.topbar-inner')!;
+  const previewNav = root.querySelector<HTMLElement>('.preview-nav')!;
+  const progress = root.querySelector<HTMLElement>('.progress')!;
+  const sizeStage = () => {
+    const fixed = getComputedStyle(previewNav).position === 'fixed';
+    const bottom = fixed ? previewNav.offsetHeight : 0;
+    const label = previewNav.querySelector('.preview-label')!.getBoundingClientRect();
+    const start = previewNav.querySelector('#start-section')!.getBoundingClientRect();
+    topbarInner.style.paddingRight = fixed ? '' : `${Math.ceil(start.right - label.left) + 16}px`;
+    const used = topbar.offsetHeight + progress.offsetHeight + bottom;
+    page.style.height = `${Math.max(320, window.innerHeight - used)}px`;
+  };
+  sizeStage();
+  window.addEventListener('resize', sizeStage);
 
   const feedback = root.querySelector<HTMLElement>('#practice-feedback')!;
   let cleanup = mountItem(root.querySelector('#practice-item')!, practice, {
+    fit: true,
     onSubmit: (response) => {
       cleanup();
       showPracticeFeedback(feedback, practice, response);
+      root.querySelectorAll<HTMLButtonElement>('#practice-item button').forEach((b) => (b.disabled = true));
     },
   });
   root.querySelector('#start-section')!.addEventListener('click', () => {
     cleanup();
     onStart();
   });
-  return () => cleanup();
+  return () => {
+    window.removeEventListener('resize', sizeStage);
+    cleanup();
+  };
 }
 
 function showPracticeFeedback(el: HTMLElement, item: Item, response: number | string): void {
@@ -60,7 +69,7 @@ function showPracticeFeedback(el: HTMLElement, item: Item, response: number | st
   el.innerHTML = `
     <strong>${correct ? 'Correct.' : `Not quite — the answer is ${escapeHtml(answer)}.`}</strong>
     <p>${escapeHtml(item.explanation)}</p>`;
-  el.closest('.practice')?.querySelectorAll<HTMLButtonElement>('button').forEach((b) => (b.disabled = true));
+  el.parentElement?.querySelectorAll<HTMLButtonElement>('#practice-item button').forEach((b) => (b.disabled = true));
 }
 
 export interface TestView {

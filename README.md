@@ -1,6 +1,6 @@
 # Cognitive Ability Assessment
 
-A free adaptive IQ test. Questions, scoring, and results all run in the browser. Nothing is sent to a server. Open the built `index.html` and take the test.
+A free adaptive IQ test. Questions, scoring, and results all run in the browser. Nothing is sent to a server. The live site is [https://codenameyau.github.io/iq-test/](https://codenameyau.github.io/iq-test/). Open the built `index.html` to take it offline.
 
 - Three lengths: Quick (20 min), Standard (40 min), Comprehensive (60 min), plus an optional nonverbal version.
 - Five sections: Matrix Reasoning, Verbal Reasoning, Spatial Reasoning, Quantitative Reasoning, Working Memory.

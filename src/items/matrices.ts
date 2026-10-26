@@ -16,6 +16,13 @@ const FILL = ['#ffffff', '#d1d5db', '#6b7280', '#1f2937'] as const;
 const FILL_NAME = ['white', 'light gray', 'dark gray', 'black'] as const;
 const INK = '#1f2937';
 const ANGLES: readonly number[] = [0, 45, 90, 135, 180, 225, 270, 315];
+/**
+ * Orientations a rotation rule uses, always on a triangle: it then points up, right, down, or
+ * left. Other 45° steps land 15° from one of these once its 120° symmetry is taken into account.
+ */
+const RULE_ANGLES: readonly number[] = [0, 90, 180, 270];
+/** Smallest turn, after a shape's own symmetry, that still reads as a different orientation. */
+const MIN_VISIBLE_TURN = 30;
 const ATTRS = ['shape', 'size', 'fill', 'count', 'rotation'] as const;
 type Attr = (typeof ATTRS)[number];
 type Component = 'single' | 'outer' | 'inner' | 'left' | 'right' | 'accent';
@@ -193,7 +200,7 @@ function possibleStarts(min: number, max: number, step: number): number[] {
 }
 
 function rotationStarts(step: number): number[] {
-  return ANGLES.filter((start) => ANGLES.includes(start + step) && ANGLES.includes(start + 2 * step));
+  return RULE_ANGLES.filter((start) => RULE_ANGLES.includes(start + step) && RULE_ANGLES.includes(start + 2 * step));
 }
 
 function pickStartTriple(rng: Rng, starts: number[], sameStart: boolean): [number, number, number] | null {
@@ -259,7 +266,7 @@ function materialize(rng: Rng, plan: AttrPlan, component: Component, sizeMax: nu
 
 function materializeRotation(rng: Rng, plan: AttrPlan, component: Component): { values: number[][]; rule: FigureRule } | null {
   if (plan.rule === 'progression') {
-    const steps = [45, -45, 90, -90].filter((step) => rotationStarts(step).length > 0);
+    const steps = [90, -90].filter((step) => rotationStarts(step).length > 0);
     const step = rng.pick(steps);
     const starts = pickStartTriple(rng, rotationStarts(step), plan.sameStart ?? false);
     if (!starts) return null;
@@ -269,14 +276,14 @@ function materializeRotation(rng: Rng, plan: AttrPlan, component: Component): { 
     };
   }
   if (plan.rule === 'distribute3') {
-    const symbols = rng.shuffle([...ANGLES]).slice(0, 3);
+    const symbols = rng.shuffle([...RULE_ANGLES]).slice(0, 3);
     return {
       values: applyLatin(symbols, rng.pick(LATIN)),
       rule: { kind: 'distribute3', component, attr: 'rotation' },
     };
   }
   if (plan.rule === 'constant') {
-    const picked = rng.shuffle([...ANGLES]).slice(0, 3);
+    const picked = rng.shuffle([...RULE_ANGLES]).slice(0, 3);
     return {
       values: picked.map((value) => [value, value, value]),
       rule: { kind: 'constant', component, attr: 'rotation' },
@@ -291,7 +298,7 @@ function buildAttrs(rng: Rng, plans: AttrPlan[], component: Component, sizeMax: 
   if (shapeVaries && rotationVaries) return null;
 
   let shapeIndex = 0;
-  if (rotationVaries) shapeIndex = SHAPES.indexOf(rng.pick(['triangle', 'pentagon'] as const));
+  if (rotationVaries) shapeIndex = SHAPES.indexOf('triangle');
   else if (!shapeVaries) shapeIndex = rng.int(0, 4);
 
   const grids: Record<Attr, number[][]> = {
@@ -308,7 +315,8 @@ function buildAttrs(rng: Rng, plans: AttrPlan[], component: Component, sizeMax: 
       ? { ...plan, rule: 'constant' as const }
       : plan;
     const made = materialize(rng, usable, component, sizeMax);
-    if (!made) return null;
+    // A planned rule that cannot vary would leave the item one rule short of its level.
+    if (!made || made.rule.kind === 'fixed') return null;
     grids[plan.attr] = made.values;
     rules.push(made.rule);
   }
@@ -475,6 +483,7 @@ function buildLevel3(rng: Rng): Draft | null {
 }
 
 function buildLevel4(rng: Rng): Draft | null {
+  if (rng.chance(0.35)) return buildSingle(rng, [{ attr: 'count', rule: 'arithmetic' }]);
   const pool: Attr[] = ['count', 'size', 'fill', 'shape', 'rotation'];
   const distributed = rng.pick(pool);
   const otherPool = pool.filter((attr) => attr !== distributed && !(attr === 'rotation' && distributed === 'shape') && !(attr === 'shape' && distributed === 'rotation'));
@@ -486,7 +495,13 @@ function buildLevel4(rng: Rng): Draft | null {
 }
 
 function buildLevel5(rng: Rng): Draft | null {
-  if (rng.chance(0.45)) return buildSingle(rng, [{ attr: 'count', rule: 'arithmetic' }]);
+  if (rng.chance(0.4)) {
+    const other = rng.pick(['shape', 'fill', 'size'] as const);
+    return buildSingle(rng, [
+      { attr: 'count', rule: 'arithmetic' },
+      { attr: other, rule: rng.pick(['progression', 'distribute3', 'constant'] as const), sameStart: false },
+    ]);
+  }
   const pool: Attr[] = rng.chance(0.35) ? ['rotation', 'size', 'fill', 'count'] : ['shape', 'size', 'fill', 'count'];
   const chosen = rng.shuffle(pool).slice(0, 3);
   const kinds = ['progression', 'distribute3', 'constant'] as const;
@@ -498,13 +513,6 @@ function buildLevel6(rng: Rng): Draft | null {
 }
 
 function buildLevel7(rng: Rng): Draft | null {
-  if (rng.chance(0.4)) {
-    const other = rng.pick(['shape', 'fill', 'size'] as const);
-    return buildSingle(rng, [
-      { attr: 'count', rule: 'arithmetic' },
-      { attr: other, rule: rng.pick(['progression', 'distribute3', 'constant'] as const), sameStart: false },
-    ]);
-  }
   const pool: Attr[] = rng.chance(0.35) ? ['rotation', 'size', 'fill', 'count'] : ['shape', 'size', 'fill', 'count'];
   const chosen = rng.shuffle(pool).slice(0, 3);
   return buildSingle(rng, [
@@ -634,17 +642,104 @@ function ruleHolds(rule: Rule, panels: Panel[][]): boolean {
   return grid.every((row) => row[2] === (rule.op === 'sub' ? row[0] - row[1] : row[0] + row[1]));
 }
 
+function sortedKey(values: readonly number[]): string {
+  return [...values].sort((a, b) => a - b).join(',');
+}
+
+/**
+ * Values the missing cell takes under each standard reading of a 3×3 grid of one attribute:
+ * constant, progression, distribution of three, and (for ordered attributes) addition or
+ * subtraction, read along rows or down columns. More than one value means a second answer.
+ */
+function readingsOf(grid: readonly (readonly number[])[], arithmetic: boolean): Set<number> {
+  const found = new Set<number>();
+  const columns = [0, 1, 2].map((col) => grid.map((row) => row[col]));
+  for (const [first, second, last] of [grid, columns]) {
+    const known = [last[0], last[1]];
+    if ([first, second].every((line) => line.every((value) => value === line[0])) && known[0] === known[1]) {
+      found.add(known[0]);
+    }
+    const step = first[1] - first[0];
+    const steps = (line: readonly number[]) => line[1] - line[0] === step && line[2] - line[1] === step;
+    if (steps(first) && steps(second) && known[1] - known[0] === step) found.add(known[1] + step);
+    if (new Set(first).size === 3 && sortedKey(first) === sortedKey(second)) {
+      const missing = first.filter((value) => !known.includes(value));
+      if (missing.length === 1) found.add(missing[0]);
+    }
+    if (arithmetic) {
+      if ([first, second].every((line) => line[2] === line[0] + line[1])) found.add(known[0] + known[1]);
+      if ([first, second].every((line) => line[2] === line[0] - line[1])) found.add(known[0] - known[1]);
+    }
+  }
+  return found;
+}
+
+const LINE_READINGS: ReadonlyArray<(a: number, b: number) => number> = [
+  (a, b) => a | b,
+  (a, b) => a ^ b,
+  (a, b) => a & b,
+  (a, b) => a & ~b,
+  (a, b) => b & ~a,
+];
+
+/** Masks the missing panel takes under every line operation that fits the first two rows. */
+function lineReadings(masks: readonly (readonly number[])[]): Set<number> {
+  const found = new Set<number>();
+  for (const op of LINE_READINGS) {
+    if (masks[0][2] === op(masks[0][0], masks[0][1]) && masks[1][2] === op(masks[1][0], masks[1][1])) {
+      found.add(op(masks[2][0], masks[2][1]));
+    }
+  }
+  return found;
+}
+
+function componentsOf(panel: Panel): Component[] {
+  if (panel.kind === 'lines') return panel.accent ? ['accent'] : [];
+  if (panel.layout === 'single') return ['single'];
+  return panel.layout === 'nested' ? ['outer', 'inner'] : ['left', 'right'];
+}
+
+/** True when every attribute, and the lines, admit only the keyed panel's value. */
+function uniquelyDetermined(panels: Panel[][]): boolean {
+  const correct = panels[2][2];
+  if (correct.kind === 'lines') {
+    const masks = panels.map((row) => row.map((panel) => (panel.kind === 'lines' ? panel.mask : -1)));
+    const masked = lineReadings(masks);
+    if (masked.size !== 1 || !masked.has(correct.mask)) return false;
+  }
+  for (const component of componentsOf(correct)) {
+    for (const attr of ATTRS) {
+      const grid = panels.map((row) => row.map((panel) => {
+        const fig = getFigure(panel, component);
+        return fig ? readFigure(fig, attr) : Number.NaN;
+      }));
+      const found = readingsOf(grid, attr !== 'shape');
+      if (found.size !== 1 || !found.has(grid[2][2])) return false;
+    }
+  }
+  return true;
+}
+
 export function panelSatisfiesRules(candidate: Panel, context: Panel[][], rules: Rule[]): boolean {
   const grid = context.map((row) => row.slice());
   grid[2][2] = candidate;
   return rules.every((rule) => ruleHolds(rule, grid));
 }
 
-function distinctAngles(shape: ShapeName): number[] {
-  if (shape === 'circle') return [0];
-  if (shape === 'square') return [0, 45];
-  if (shape === 'hexagon') return [0, 45, 90, 135];
-  return [...ANGLES];
+const SYMMETRY_TURN: Record<ShapeName, number> = { triangle: 120, square: 90, pentagon: 72, hexagon: 60, circle: 0 };
+
+/** How far apart two orientations of a shape look, after its rotational symmetry. */
+function visibleTurn(shape: ShapeName, a: number, b: number): number {
+  const period = SYMMETRY_TURN[shape];
+  if (period === 0) return 0;
+  const turn = (((a - b) % period) + period) % period;
+  return Math.min(turn, period - turn);
+}
+
+function visibleAlternativeAngles(fig: Figure): number[] {
+  const angles = ANGLES.filter((angle) => visibleTurn(fig.shape, angle, fig.rotation) >= MIN_VISIBLE_TURN);
+  const ruled = angles.filter((angle) => RULE_ANGLES.includes(angle));
+  return ruled.length > 0 ? ruled : angles;
 }
 
 function sizeCeiling(panel: Panel, component: Component): number {
@@ -672,7 +767,7 @@ function altValue(rng: Rng, fig: Figure, attr: Attr, correct: number, sizeMax: n
     const near = pool.filter((value) => Math.abs(value - correct) <= 2);
     return rng.pick(near.length > 0 ? near : pool);
   }
-  const angles = distinctAngles(fig.shape).filter((angle) => angle !== fig.rotation);
+  const angles = visibleAlternativeAngles(fig);
   return angles.length > 0 ? rng.pick(angles) : null;
 }
 
@@ -1080,7 +1175,7 @@ function vectorFor(mask: number, mods: Mod[]): string[] {
 
 function assemble(rng: Rng, level: Level, draft: Draft): MatrixSample | null {
   const correct = draft.panels[2][2];
-  if (!panelSatisfiesRules(correct, draft.panels, draft.rules)) return null;
+  if (!panelSatisfiesRules(correct, draft.panels, draft.rules) || !uniquelyDetermined(draft.panels)) return null;
   const mods = selectMods(rng, correct, draft.rules, draft.panels);
   if (!mods) return null;
   const combos = [0, 1, 2, 3, 4, 5, 6, 7].map((mask) => applyMask(correct, mods, mask));
@@ -1141,9 +1236,9 @@ export function generateMatrices(rng: Rng, targetB: number, usedIds: ReadonlySet
     const index = primary + delta;
     if (index >= 0 && index < LEVELS.length) order.push(index);
   }
-  for (let index = 0; index < LEVELS.length; index++) {
-    if (!order.includes(index)) order.push(index);
-  }
+  const rest = LEVELS.map((_, index) => index).filter((index) => !order.includes(index));
+  rest.sort((left, right) => Math.abs(LEVELS[left].b - targetB) - Math.abs(LEVELS[right].b - targetB) || left - right);
+  order.push(...rest);
   for (const index of order) {
     const tries = index === primary ? 50 : 15;
     for (let attempt = 0; attempt < tries; attempt++) {

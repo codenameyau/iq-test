@@ -4,7 +4,9 @@ import type { Rng } from '../core/rng';
 /**
  * Quantitative series and number-matrix items.
  * If any easier family fits the shown terms, that easier strategy is the real
- * difficulty, so the draft is discarded. Shown terms stay ≤ 999 and the answer
+ * difficulty, so the draft is discarded. So is a draft that a plain rule from
+ * any family (constant differences or ratio, two strands, Fibonacci, row or
+ * column arithmetic) continues differently. Shown terms stay ≤ 999 and the answer
  * ≤ 1999; a multiplication used to reach the answer is at most two-digit ×
  * one-digit, or ×10 / ×100.
  */
@@ -60,7 +62,8 @@ const FAMILIES: readonly Family[] = [
   { name: 'minus-or-double', b: -1.8, a: 1.3, kind: 'series' },
   { name: 'increasing-diff', b: -1.1, a: 1.4, kind: 'series' },
   { name: 'times3-square-alt', b: -0.6, a: 1.4, kind: 'series' },
-  { name: 'interleaved', b: 0, a: 1.5, kind: 'series' },
+  { name: 'interleaved', b: 0.3, a: 1.5, kind: 'series' },
+  { name: 'row-col-arith', b: -1.6, a: 1.3, kind: 'matrix' },
   { name: 'row-sum', b: -1.2, a: 1.3, kind: 'matrix' },
   { name: 'row-product', b: -0.4, a: 1.4, kind: 'matrix' },
   { name: 'row-double-sum', b: 0.3, a: 1.4, kind: 'matrix' },
@@ -69,7 +72,6 @@ const FAMILIES: readonly Family[] = [
   { name: 'alt-ops', b: 0.8, a: 1.5, kind: 'series' },
   { name: 'fibonacci', b: 0.9, a: 1.5, kind: 'series' },
   { name: 'geo-diff-poly', b: 1.3, a: 1.6, kind: 'series' },
-  { name: 'row-col-arith', b: 1.3, a: 1.5, kind: 'matrix' },
   { name: 'mixed-interleave', b: 1.7, a: 1.6, kind: 'series' },
   { name: 'row-col-combo', b: 2.0, a: 1.6, kind: 'matrix' },
   { name: 'affine-third', b: 2.1, a: 1.6, kind: 'series' },
@@ -444,6 +446,194 @@ function fitRowColArith(shown: number[]): number | null {
   return fromRow === fromCol ? fromRow : null;
 }
 
+type Continuation = (terms: number[]) => number | null;
+
+/** Constant k-th differences, with at least two values at the deepest level so the rule is tested. */
+function byDifferences(order: number): Continuation {
+  return (terms) => {
+    const levels = [terms];
+    for (let i = 0; i < order; i++) levels.push(differences(levels[levels.length - 1]));
+    const deepest = levels[order];
+    if (deepest.length < 2 || deepest.some((value) => value !== deepest[0])) return null;
+    let next = deepest[0];
+    for (let level = order - 1; level >= 0; level--) next += levels[level][levels[level].length - 1];
+    return next;
+  };
+}
+
+function byRatio(terms: number[]): number | null {
+  if (terms.some((term) => term === 0)) return null;
+  for (let i = 2; i < terms.length; i++) {
+    if (terms[i] * terms[0] !== terms[i - 1] * terms[1]) return null;
+  }
+  return (terms[terms.length - 1] * terms[1]) / terms[0];
+}
+
+function byInterleavedSteps(minPerStrand: number): Continuation {
+  return (terms) => {
+    const even = terms.filter((_, i) => i % 2 === 0);
+    const odd = terms.filter((_, i) => i % 2 === 1);
+    if (even.length < minPerStrand || odd.length < minPerStrand) return null;
+    const evenStep = constantDifference(even);
+    const oddStep = constantDifference(odd);
+    if (evenStep === null || oddStep === null) return null;
+    return terms.length % 2 === 0 ? even[even.length - 1] + evenStep : odd[odd.length - 1] + oddStep;
+  };
+}
+
+function bySumOfTwo(offset: 'zero' | 'any'): Continuation {
+  return (terms) => {
+    if (terms.length < 5) return null;
+    const k = offset === 'zero' ? 0 : terms[2] - terms[1] - terms[0];
+    for (let i = 2; i < terms.length; i++) {
+      if (terms[i] !== terms[i - 1] + terms[i - 2] + k) return null;
+    }
+    return terms[terms.length - 1] + terms[terms.length - 2] + k;
+  };
+}
+
+function byAlternatingDifferences(terms: number[]): number | null {
+  const diffs = differences(terms);
+  if (diffs.length < 4) return null;
+  for (let i = 2; i < diffs.length; i++) {
+    if (diffs[i] !== diffs[i - 2]) return null;
+  }
+  return terms[terms.length - 1] + diffs[diffs.length - 2];
+}
+
+function byAffine(terms: number[]): number | null {
+  for (let factor = -3; factor <= 4; factor++) {
+    if (factor === 0) continue;
+    const offset = terms[1] - factor * terms[0];
+    if (terms.every((term, i) => i === 0 || term === factor * terms[i - 1] + offset)) {
+      return factor * terms[terms.length - 1] + offset;
+    }
+  }
+  return null;
+}
+
+function byMultiplyThenAdd(factor: number, phase: 0 | 1): Continuation {
+  return (terms) => {
+    let addend: number | null = null;
+    for (let i = 1; i < terms.length; i++) {
+      if ((i + phase) % 2 === 1) {
+        if (terms[i] !== terms[i - 1] * factor) return null;
+      } else {
+        addend ??= terms[i] - terms[i - 1];
+        if (terms[i] !== terms[i - 1] + addend) return null;
+      }
+    }
+    if (addend === null) return null;
+    const last = terms[terms.length - 1];
+    return (terms.length + phase) % 2 === 1 ? last * factor : last + addend;
+  };
+}
+
+function byGeometricDifferences(terms: number[]): number | null {
+  const diffs = differences(terms);
+  if (diffs.length < 3) return null;
+  const next = byRatio(diffs);
+  return next === null ? null : terms[terms.length - 1] + next;
+}
+
+function bySumOfThree(terms: number[]): number | null {
+  if (terms.length < 5) return null;
+  for (let i = 3; i < terms.length; i++) {
+    if (terms[i] !== terms[i - 1] + terms[i - 2] + terms[i - 3]) return null;
+  }
+  const n = terms.length;
+  return terms[n - 1] + terms[n - 2] + terms[n - 3];
+}
+
+/**
+ * Rules a solver tries first, whatever the family. One that fits every shown
+ * term but continues differently gives the item a second answer.
+ */
+const PLAIN_SERIES_RULES: readonly Continuation[] = [
+  byDifferences(1),
+  byDifferences(2),
+  byDifferences(3),
+  byRatio,
+  byInterleavedSteps(3),
+  bySumOfTwo('zero'),
+  byAlternatingDifferences,
+];
+
+/** Less obvious rules. Their continuations are never offered as distractors. */
+const LOOSE_SERIES_RULES: readonly Continuation[] = [
+  byInterleavedSteps(2),
+  bySumOfTwo('any'),
+  byAffine,
+  byMultiplyThenAdd(2, 0),
+  byMultiplyThenAdd(2, 1),
+  byMultiplyThenAdd(3, 0),
+  byMultiplyThenAdd(3, 1),
+  byGeometricDifferences,
+  bySumOfThree,
+];
+
+type CellRule = (x: number, y: number) => number;
+
+const PLAIN_CELL_RULES: readonly CellRule[] = [
+  (x, y) => x + y,
+  (x, y) => x * y,
+  (x, y) => x - y,
+  (x, y) => y - x,
+  (x, y) => (x + y) * 2,
+  (x, y) => x * y - x,
+  (x, y) => x * y - y,
+  (x, y) => 2 * x + y,
+  (x, y) => x + 2 * y,
+];
+
+const LOOSE_CELL_RULES: readonly CellRule[] = [
+  (x, y) => x * y + x,
+  (x, y) => x * y + y,
+  (x, y) => x + y + 1,
+  (x, y) => x + y - 1,
+  (x, y) => x * y + 1,
+  (x, y) => x * y - 1,
+  (x, y) => 2 * x - y,
+  (x, y) => 2 * y - x,
+  (x, y) => (x + y) * 3,
+  (x, y) => x * y * 2,
+];
+
+/** Continuations of each cell rule when it holds along both complete rows, or both complete columns. */
+function cellRuleAnswers(shown: number[], rules: readonly CellRule[]): number[] {
+  const [a, b, c, d, e, f, g, h] = shown;
+  const out: number[] = [];
+  for (const rule of rules) {
+    if (c === rule(a, b) && f === rule(d, e)) out.push(rule(g, h));
+    if (g === rule(a, d) && h === rule(b, e)) out.push(rule(c, f));
+  }
+  return out;
+}
+
+/**
+ * Answers under rules any solver of a number matrix tries first, or null when
+ * the first two rows repeat and so show the rule only once.
+ */
+function plainMatrixAnswers(shown: number[]): number[] | null {
+  const [a, b, c, d, e, f, g, h] = shown;
+  if (a === d && b === e && c === f) return null;
+  const out = cellRuleAnswers(shown, PLAIN_CELL_RULES);
+  if (b - a === c - b && e - d === f - e) out.push(h + (h - g));
+  if (d - a === g - d && e - b === h - e) out.push(f + (f - c));
+  if (a + b + c === d + e + f) out.push(a + b + c - g - h);
+  if (a + d + g === b + e + h) out.push(a + d + g - c - f);
+  return out.filter((value) => value >= 0);
+}
+
+function plainSeriesAnswers(terms: number[]): number[] {
+  return pack(...PLAIN_SERIES_RULES.map((rule) => rule(terms)));
+}
+
+function looseAnswers(kind: FamilyKind, terms: number[]): number[] {
+  if (kind === 'matrix') return pack(...cellRuleAnswers(terms, LOOSE_CELL_RULES));
+  return pack(...LOOSE_SERIES_RULES.map((rule) => rule(terms)));
+}
+
 function seriesPredictions(name: FamilyName, terms: number[]): number[] {
   switch (name) {
     case 'plus-k':
@@ -636,7 +826,9 @@ function pickDistractors(rng: Rng, answer: number, banned: ReadonlySet<number>, 
 function acceptsDraft(family: Family, shown: number[], answer: number): Set<number> | null {
   const own = predictionsFor(family, shown);
   if (own.length !== 1 || own[0] !== answer) return null;
-  const banned = new Set<number>([answer]);
+  const plain = family.kind === 'matrix' ? plainMatrixAnswers(shown) : plainSeriesAnswers(shown);
+  if (!plain || plain.some((value) => value !== answer)) return null;
+  const banned = new Set<number>([answer, ...looseAnswers(family.kind, shown)]);
   for (const other of FAMILIES) {
     if (other.kind !== family.kind || other.name === family.name) continue;
     const predicted = predictionsFor(other, shown);
@@ -782,6 +974,7 @@ function draftTimes3SquareAlt(rng: Rng): Draft | null {
   }
   const add = rng.int(2, 9);
   const sub = rng.int(1, 6);
+  if (add === sub) return null;
   const length = rng.int(5, 8);
   const start = rng.int(sub * length, sub * length + 30);
   const shown = [start];
@@ -1228,6 +1421,8 @@ function draftRowColArith(rng: Rng): Draft | null {
     const a = rng.int(1, 9);
     const stepAcross = rng.int(1, 6);
     const stepDown = rng.int(1, 6);
+    // Otherwise the nine cells read as one counting sequence.
+    if (stepDown === 3 * stepAcross) continue;
     const rows = [
       [a, a + stepAcross, a + 2 * stepAcross],
       [a + stepDown, a + stepAcross + stepDown, a + 2 * stepAcross + stepDown],

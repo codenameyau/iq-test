@@ -40,6 +40,22 @@ describe('memory generator', () => {
     }
   });
 
+  it('runs tasks in blocks so the instruction changes at most twice per section', () => {
+    const count = 10;
+    const tasks = Array.from({ length: count }, (_, index) =>
+      memoryGenerator.generate(createRng(index), 0, new Set(), { index, count }).family,
+    );
+    expect(tasks[0]).toBe('wm-backward');
+    expect(tasks[count - 1]).toBe('wm-letterNumber');
+    const switches = tasks.filter((t, i) => i > 0 && t !== tasks[i - 1]).length;
+    expect(switches).toBe(2);
+  });
+
+  it('puts an average adult at 50% on five digits backward', () => {
+    const item = memoryGenerator.generate(createRng(1), 0, new Set(), { index: 0, count: 10 }) as RecallItem;
+    expect(item.sequence).toHaveLength(5);
+  });
+
   it('normalizes typed responses', () => {
     expect(normalizeRecall(' 3, 5 a b ')).toBe('35AB');
   });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { estimateAbility, normalCdf, optimalDifficulty, personFit, probability } from './irt';
+import { difficultyForSuccess, estimateAbility, normalCdf, personFit, probability } from './irt';
 
 describe('irt', () => {
   it('3PL probability is c at -inf, 1 at +inf and (1+c)/2 at theta = b', () => {
@@ -22,9 +22,14 @@ describe('irt', () => {
     expect(est.se).toBeLessThan(1);
   });
 
-  it('optimal difficulty sits above theta only when guessing is possible', () => {
-    expect(optimalDifficulty(0.3, 1.4, 0)).toBeCloseTo(0.3, 6);
-    expect(optimalDifficulty(0.3, 1.4, 0.25)).toBeGreaterThan(0.3);
+  it('difficultyForSuccess picks an item answered correctly at the requested rate', () => {
+    for (const c of [0, 0.125, 0.25]) {
+      for (const success of [0.5, 0.7, 0.85]) {
+        const b = difficultyForSuccess(0.3, 1.4, c, success);
+        expect(probability(0.3, { a: 1.4, b, c })).toBeCloseTo(success, 6);
+      }
+    }
+    expect(difficultyForSuccess(0, 1.4, 0, 0.7)).toBeLessThan(0);
   });
 
   it('person-fit flags a reversed (aberrant) pattern', () => {

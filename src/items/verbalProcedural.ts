@@ -62,6 +62,8 @@ interface OrderRelation {
   least: string;
   /** Stem after "the second …". */
   ordinal: string;
+  /** Opening line that makes the relation transitive, e.g. a row rather than a circle. */
+  setup?: string;
 }
 
 interface OrderLevel {
@@ -119,7 +121,15 @@ const ORDER_RELATIONS: readonly OrderRelation[] = [
   { id: 'older', cmp: 'is older than', inv: 'is younger than', most: 'the oldest', least: 'the youngest', ordinal: 'oldest' },
   { id: 'taller', cmp: 'is taller than', inv: 'is shorter than', most: 'the tallest', least: 'the shortest', ordinal: 'tallest' },
   { id: 'before', cmp: 'finished before', inv: 'finished after', most: 'the first to finish', least: 'the last to finish', ordinal: 'to finish' },
-  { id: 'left', cmp: 'sits to the left of', inv: 'sits to the right of', most: 'the leftmost', least: 'the rightmost', ordinal: 'from the left' },
+  {
+    id: 'left',
+    cmp: 'sits to the left of',
+    inv: 'sits to the right of',
+    most: 'the leftmost',
+    least: 'the rightmost',
+    ordinal: 'from the left',
+    setup: 'Everyone named below sits in one straight row.',
+  },
 ];
 
 // b tracks chain length, headcount, inverse wording, and indirect noise — not a fixed ladder.
@@ -168,7 +178,7 @@ const SYLLOGISM_FORMS: readonly SylForm[] = [
       { q: 'all', s: 0, p: 2 },
       { q: 'all', s: 2, p: 0 },
       { q: 'no', s: 0, p: 2 },
-      { q: 'some-not', s: 0, p: 1 },
+      { q: 'all', s: 1, p: 0 },
     ],
   },
   {
@@ -241,20 +251,20 @@ const SYLLOGISM_FORMS: readonly SylForm[] = [
     ],
   },
   {
-    id: 'short-chain',
+    id: 'no-chain-could',
     b: 1.2,
     k: 3,
-    ask: 'must',
+    ask: 'could',
     premises: [
       { q: 'all', s: 0, p: 1 },
       { q: 'no', s: 1, p: 2 },
     ],
-    key: { q: 'no', s: 0, p: 2 },
+    key: { q: 'some-not', s: 1, p: 0 },
     distractors: [
-      { q: 'all', s: 1, p: 0 },
       { q: 'some', s: 0, p: 2 },
       { q: 'all', s: 0, p: 2 },
-      { q: 'some-not', s: 2, p: 1 },
+      { q: 'some', s: 2, p: 1 },
+      { q: 'no', s: 0, p: 1 },
     ],
   },
   {
@@ -309,7 +319,7 @@ const SYLLOGISM_FORMS: readonly SylForm[] = [
       { q: 'all', s: 1, p: 0 },
       { q: 'all', s: 1, p: 2 },
       { q: 'no', s: 0, p: 2 },
-      { q: 'some', s: 2, p: 0 },
+      { q: 'some-not', s: 2, p: 1 },
     ],
   },
   {
@@ -365,7 +375,7 @@ const RELATIONS: readonly Relation[] = [
       pair('CUB', 'BEAR', 'PUP', 'DEN', 'CAVE', 'CLAW'),
       pair('CHICK', 'HEN', 'EGG', 'NEST', 'FEATHER', 'GRAIN'),
       pair('LAMB', 'SHEEP', 'KID', 'WOOL', 'FLOCK', 'MEADOW'),
-      pair('DUCKLING', 'DUCK', 'DRAKE', 'POND', 'BILL', 'PADDLE'),
+      pair('DUCKLING', 'DUCK', 'EGG', 'POND', 'BILL', 'PADDLE'),
     ],
   },
   {
@@ -374,7 +384,7 @@ const RELATIONS: readonly Relation[] = [
     blurb: 'is a member of the category',
     pairs: [
       pair('FRUIT', 'APPLE', 'FOOD', 'ORCHARD', 'JUICE', 'PIE'),
-      pair('METAL', 'IRON', 'ELEMENT', 'MINE', 'RUST', 'STEEL'),
+      pair('METAL', 'IRON', 'ELEMENT', 'MINE', 'RUST', 'MAGNET'),
       pair('BIRD', 'SPARROW', 'ANIMAL', 'NEST', 'WING', 'BEAK'),
       pair('FISH', 'SALMON', 'CREATURE', 'SCALE', 'GILL', 'OCEAN'),
       pair('TREE', 'OAK', 'PLANT', 'LEAF', 'FOREST', 'ACORN'),
@@ -388,34 +398,34 @@ const RELATIONS: readonly Relation[] = [
     b: -0.6,
     blurb: 'has as a part',
     pairs: [
-      pair('FINGER', 'HAND', 'NAIL', 'PALM', 'GLOVE', 'RING'),
-      pair('PAGE', 'BOOK', 'WORD', 'COVER', 'SHELF', 'CHAPTER'),
-      pair('WHEEL', 'CAR', 'SPOKE', 'TYRE', 'ROAD', 'ENGINE'),
-      pair('KEY', 'KEYBOARD', 'LETTER', 'SCREEN', 'MOUSE', 'CABLE'),
-      pair('LEAF', 'TREE', 'VEIN', 'BRANCH', 'FOREST', 'SHADE'),
-      pair('BRICK', 'WALL', 'DUST', 'CEMENT', 'HOUSE', 'MORTAR'),
+      pair('FINGER', 'HAND', 'NAIL', 'PALM', 'THUMB', 'RING'),
+      pair('PAGE', 'BOOK', 'WORD', 'COVER', 'SHELF', 'READER'),
+      pair('WHEEL', 'CAR', 'SPOKE', 'BRAKE', 'ROAD', 'ENGINE'),
+      pair('STRING', 'GUITAR', 'THREAD', 'MUSIC', 'SONG', 'PICK'),
+      pair('LEAF', 'TREE', 'VEIN', 'AUTUMN', 'FOREST', 'SHADE'),
+      pair('BRICK', 'WALL', 'DUST', 'CEMENT', 'CLAY', 'MORTAR'),
       pair('PETAL', 'FLOWER', 'TIP', 'SCENT', 'GARDEN', 'POLLEN'),
       pair('ROOM', 'HOUSE', 'FLOOR', 'DOOR', 'ROOF', 'STREET'),
     ],
   },
   {
     id: 'container',
-    b: -0.15,
+    b: -0.3,
     blurb: 'is held in',
     pairs: [
-      pair('BOTTLE', 'WATER', 'FLASK', 'CORK', 'LABEL', 'DRINK'),
-      pair('LIBRARY', 'BOOK', 'BUILDING', 'SHELF', 'READER', 'CATALOGUE'),
-      pair('QUIVER', 'ARROW', 'CASE', 'BOW', 'ARCHER', 'TARGET'),
-      pair('WALLET', 'COIN', 'PURSE', 'CARD', 'POCKET', 'LEATHER'),
-      pair('VASE', 'FLOWER', 'GLASS', 'TABLE', 'STEM', 'BOUQUET'),
+      pair('BOTTLE', 'WATER', 'FLASK', 'CORK', 'LABEL', 'THIRST'),
+      pair('LIBRARY', 'BOOK', 'BUILDING', 'AUTHOR', 'LOAN', 'QUIET'),
+      pair('JAR', 'JAM', 'POT', 'LID', 'SPOON', 'TOAST'),
+      pair('WALLET', 'MONEY', 'PURSE', 'LEATHER', 'POCKET', 'THIEF'),
+      pair('VASE', 'FLOWER', 'GLASS', 'TABLE', 'STEM', 'SHELF'),
       pair('ENVELOPE', 'LETTER', 'PACKET', 'STAMP', 'SEAL', 'ADDRESS'),
-      pair('CAGE', 'BIRD', 'PEN', 'PERCH', 'SEED', 'BAR'),
-      pair('TANK', 'FISH', 'POND', 'NET', 'CORAL', 'GLASS'),
+      pair('CAGE', 'BIRD', 'PEN', 'WING', 'SONG', 'BAR'),
+      pair('TANK', 'FISH', 'POND', 'NET', 'FIN', 'GLASS'),
     ],
   },
   {
     id: 'tool-user',
-    b: 0.3,
+    b: 0.0,
     blurb: 'uses',
     pairs: [
       pair('PEN', 'WRITER', 'INK', 'PAPER', 'DESK', 'SCRIPT'),
@@ -424,98 +434,98 @@ const RELATIONS: readonly Relation[] = [
       pair('OVEN', 'BAKER', 'TRAY', 'BREAD', 'FLOUR', 'KITCHEN'),
       pair('HAMMER', 'CARPENTER', 'CLAW', 'NAIL', 'WOOD', 'BENCH'),
       pair('NEEDLE', 'TAILOR', 'POINT', 'THREAD', 'CLOTH', 'BUTTON'),
-      pair('PLOW', 'FARMER', 'BLADE', 'SOIL', 'FIELD', 'HARVEST'),
+      pair('TRACTOR', 'FARMER', 'ENGINE', 'SOIL', 'FIELD', 'HARVEST'),
       pair('CAMERA', 'PHOTOGRAPHER', 'SHUTTER', 'LENS', 'TRIPOD', 'FLASH'),
     ],
   },
   {
     id: 'action-result',
-    b: 0.7,
+    b: 0.3,
     blurb: 'results from',
     pairs: [
       pair('BAKE', 'BREAD', 'FLOUR', 'OVEN', 'KITCHEN', 'DOUGH'),
       pair('SEW', 'SHIRT', 'FABRIC', 'NEEDLE', 'THREAD', 'BUTTON'),
-      pair('DIG', 'HOLE', 'DIRT', 'SPADE', 'SOIL', 'GARDEN'),
+      pair('DIG', 'HOLE', 'GROUND', 'SPADE', 'WORM', 'GARDEN'),
       pair('WRITE', 'LETTER', 'INK', 'PEN', 'PAPER', 'DESK'),
-      pair('CHOP', 'WOOD', 'CHIP', 'AXE', 'TREE', 'LOG'),
-      pair('FREEZE', 'ICE', 'FROST', 'COLD', 'WINTER', 'CUBE'),
-      pair('WEAVE', 'CLOTH', 'YARN', 'LOOM', 'THREAD', 'PATTERN'),
-      pair('PRINT', 'PAGE', 'TYPE', 'INK', 'PRESS', 'COPY'),
+      pair('BUILD', 'HOUSE', 'BRICK', 'CRANE', 'STREET', 'GARDEN'),
+      pair('FREEZE', 'ICE', 'WATER', 'COLD', 'WINTER', 'SKATE'),
+      pair('WEAVE', 'CLOTH', 'YARN', 'LOOM', 'THREAD', 'SHEEP'),
+      pair('PRINT', 'PAGE', 'TYPE', 'INK', 'PRESS', 'OFFICE'),
     ],
   },
   {
     id: 'degree',
-    b: 1.05,
+    b: 0.6,
     blurb: 'is a stronger degree of',
     pairs: [
-      pair('WARM', 'HOT', 'TEPID', 'BOIL', 'OVEN', 'SUMMER'),
-      pair('COOL', 'COLD', 'CHILLY', 'ICE', 'WINTER', 'FREEZE'),
+      pair('WARM', 'HOT', 'TEPID', 'SOUP', 'OVEN', 'SUMMER'),
+      pair('COOL', 'COLD', 'MILD', 'ICE', 'WINTER', 'SCARF'),
       pair('BREEZE', 'GALE', 'DRAFT', 'LEAF', 'SAIL', 'FLAG'),
-      pair('DRIZZLE', 'DOWNPOUR', 'MIST', 'RAIN', 'CLOUD', 'PUDDLE'),
-      pair('WHISPER', 'SHOUT', 'MURMUR', 'VOICE', 'ECHO', 'SPEECH'),
-      pair('STROLL', 'SPRINT', 'JOG', 'WALK', 'PATH', 'SHOE'),
+      pair('DRIZZLE', 'DOWNPOUR', 'MIST', 'UMBRELLA', 'CLOUD', 'PUDDLE'),
+      pair('WHISPER', 'SHOUT', 'HUSH', 'VOICE', 'ECHO', 'SPEECH'),
+      pair('STROLL', 'SPRINT', 'AMBLE', 'PARK', 'PATH', 'SHOE'),
       pair('DISLIKE', 'HATE', 'ANNOY', 'ANGER', 'ENEMY', 'QUARREL'),
-      pair('LIKE', 'LOVE', 'ENJOY', 'FONDNESS', 'HEART', 'FRIEND'),
+      pair('LIKE', 'LOVE', 'TOLERATE', 'GIFT', 'HEART', 'FRIEND'),
     ],
   },
   {
     id: 'creator',
-    b: 1.4,
+    b: 0.75,
     blurb: 'is created by',
     pairs: [
-      pair('POET', 'POEM', 'PEN', 'RHYME', 'VERSE', 'STANZA'),
-      pair('COMPOSER', 'SYMPHONY', 'BATON', 'ORCHESTRA', 'NOTE', 'CONCERT'),
+      pair('POET', 'POEM', 'PEN', 'INK', 'DESK', 'READER'),
+      pair('COMPOSER', 'SYMPHONY', 'BATON', 'ORCHESTRA', 'PIANO', 'CONCERT'),
       pair('SCULPTOR', 'STATUE', 'CLAY', 'STONE', 'CHISEL', 'MARBLE'),
-      pair('ARCHITECT', 'BUILDING', 'RULER', 'PLAN', 'BRICK', 'STREET'),
-      pair('CHEF', 'MEAL', 'KNIFE', 'KITCHEN', 'RECIPE', 'PAN'),
-      pair('AUTHOR', 'NOVEL', 'PEN', 'CHAPTER', 'PAGE', 'PLOT'),
+      pair('ARCHITECT', 'BUILDING', 'RULER', 'CRANE', 'BRICK', 'STREET'),
+      pair('CHEF', 'MEAL', 'KNIFE', 'KITCHEN', 'APRON', 'PAN'),
+      pair('AUTHOR', 'NOVEL', 'PEN', 'SHELF', 'LIBRARY', 'READER'),
       pair('PAINTER', 'PORTRAIT', 'EASEL', 'CANVAS', 'BRUSH', 'FRAME'),
-      pair('CARTOGRAPHER', 'MAP', 'PENCIL', 'COMPASS', 'SCALE', 'LEGEND'),
+      pair('CARTOGRAPHER', 'MAP', 'PENCIL', 'COMPASS', 'SCALE', 'EXPLORER'),
     ],
   },
   {
     id: 'cause',
-    b: 1.75,
+    b: 1.0,
     blurb: 'is caused by',
     pairs: [
-      pair('RAIN', 'FLOOD', 'CLOUD', 'UMBRELLA', 'PUDDLE', 'STORM'),
-      pair('FIRE', 'SMOKE', 'SPARK', 'FLAME', 'ASH', 'HEAT'),
-      pair('VIRUS', 'ILLNESS', 'GERM', 'FEVER', 'COUGH', 'DOCTOR'),
-      pair('DROUGHT', 'FAMINE', 'SUN', 'CROP', 'DESERT', 'THIRST'),
-      pair('JOKE', 'LAUGHTER', 'SMILE', 'CROWD', 'COMIC', 'STAGE'),
-      pair('WIND', 'EROSION', 'GUST', 'DUST', 'SAND', 'SOIL'),
+      pair('RAIN', 'FLOOD', 'CLOUD', 'UMBRELLA', 'BOOT', 'STORM'),
+      pair('FIRE', 'SMOKE', 'SPARK', 'FLAME', 'WOOD', 'CAMP'),
+      pair('VIRUS', 'ILLNESS', 'GERM', 'CELL', 'LAB', 'DOCTOR'),
+      pair('DROUGHT', 'FAMINE', 'SUN', 'CROP', 'SKY', 'CACTUS'),
+      pair('JOKE', 'LAUGHTER', 'PUN', 'CROWD', 'COMIC', 'STAGE'),
+      pair('WIND', 'EROSION', 'GUST', 'KITE', 'SAND', 'SOIL'),
       pair('STUDY', 'KNOWLEDGE', 'READING', 'BOOK', 'SCHOOL', 'TEST'),
-      pair('FRICTION', 'HEAT', 'RUB', 'SURFACE', 'WARMTH', 'MOTION'),
+      pair('FRICTION', 'HEAT', 'RUB', 'SURFACE', 'SANDPAPER', 'MOTION'),
     ],
   },
   {
     id: 'representation',
-    b: 2.05,
+    b: 1.35,
     blurb: 'is represented by',
     pairs: [
-      pair('MAP', 'TERRITORY', 'COMPASS', 'SCALE', 'BORDER', 'NORTH'),
-      pair('PORTRAIT', 'PERSON', 'FRAME', 'PAINT', 'LIKENESS', 'SITTER'),
-      pair('SCRIPT', 'PLAY', 'ACTOR', 'STAGE', 'SCENE', 'DIALOGUE'),
-      pair('SCORE', 'MUSIC', 'NOTE', 'ORCHESTRA', 'PAGE', 'TEMPO'),
-      pair('BLUEPRINT', 'BUILDING', 'RULER', 'PLAN', 'WALL', 'SITE'),
-      pair('MENU', 'MEAL', 'WAITER', 'DISH', 'PRICE', 'COURSE'),
-      pair('DIAGRAM', 'MACHINE', 'LABEL', 'PART', 'ARROW', 'MANUAL'),
-      pair('REPLICA', 'ORIGINAL', 'COPY', 'DISPLAY', 'VERSION', 'SCALE'),
+      pair('MAP', 'TERRITORY', 'COMPASS', 'SCALE', 'HIKER', 'NORTH'),
+      pair('PORTRAIT', 'PERSON', 'FRAME', 'PAINT', 'LIKENESS', 'GALLERY'),
+      pair('SCRIPT', 'PLAY', 'ACTOR', 'STAGE', 'CURTAIN', 'TICKET'),
+      pair('SCORE', 'MUSIC', 'NOTE', 'ORCHESTRA', 'PAGE', 'CONDUCTOR'),
+      pair('BLUEPRINT', 'BUILDING', 'RULER', 'PLAN', 'CRANE', 'SITE'),
+      pair('GLOBE', 'EARTH', 'ATLAS', 'SPIN', 'STAND', 'CLASSROOM'),
+      pair('DIAGRAM', 'MACHINE', 'LABEL', 'OIL', 'ARROW', 'MANUAL'),
+      pair('REPLICA', 'ORIGINAL', 'COPY', 'DISPLAY', 'MUSEUM', 'SCALE'),
     ],
   },
   {
     id: 'symptom',
-    b: 2.35,
+    b: 1.6,
     blurb: 'is indicated by',
     pairs: [
       pair('FEVER', 'ILLNESS', 'CHILL', 'THERMOMETER', 'SWEAT', 'BED'),
       pair('COUGH', 'INFECTION', 'SNEEZE', 'THROAT', 'TISSUE', 'CHEST'),
-      pair('RASH', 'ALLERGY', 'ITCH', 'SKIN', 'HIVE', 'POLLEN'),
-      pair('LIMP', 'INJURY', 'PAIN', 'LEG', 'BANDAGE', 'CRUTCH'),
+      pair('RASH', 'ALLERGY', 'ITCH', 'SKIN', 'CREAM', 'MIRROR'),
+      pair('LIMP', 'INJURY', 'STUMBLE', 'LEG', 'BANDAGE', 'CRUTCH'),
       pair('WILT', 'DROUGHT', 'DROOP', 'LEAF', 'PLANT', 'SOIL'),
-      pair('SMOKE', 'FIRE', 'ASH', 'FLAME', 'ALARM', 'SIREN'),
-      pair('TREMBLE', 'FEAR', 'SHAKE', 'HAND', 'NERVE', 'DANGER'),
-      pair('BLISTER', 'BURN', 'SORE', 'SCAR', 'HEAT', 'SUN'),
+      pair('SMOKE', 'FIRE', 'ASH', 'CHIMNEY', 'ALARM', 'SIREN'),
+      pair('TREMBLE', 'FEAR', 'SHAKE', 'HAND', 'NERVE', 'VOICE'),
+      pair('BLISTER', 'BURN', 'SORE', 'SCAR', 'BANDAGE', 'SKIN'),
     ],
   },
 ];
@@ -680,7 +690,8 @@ function finishOrder(rng: Rng, level: OrderLevel): OrderBuilt {
   );
   for (const name of notMost) lines.push(`${name} is not ${relation.most}.`);
   for (const name of notLeast) lines.push(`${name} is not ${relation.least}.`);
-  const premiseText = rng.shuffle(lines).join(' ');
+  const shuffledLines = rng.shuffle(lines).join(' ');
+  const premiseText = relation.setup ? `${relation.setup} ${shuffledLines}` : shuffledLines;
   const direct = new Set(befores.map(([earlier, later]) => edgeKey(earlier, later)));
   const banned = premiseBans(relation, befores);
 
@@ -689,7 +700,7 @@ function finishOrder(rng: Rng, level: OrderLevel): OrderBuilt {
   const solved = models[0];
   if (!solved) throw new Error('Ordering model missing.');
 
-  let prompt = 'Answer the question.';
+  let prompt = 'Read the statements, then answer the question.';
   let questionText = '';
   let raw: OrderOption[] = [];
   let explanation = '';

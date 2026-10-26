@@ -63,7 +63,7 @@ export function renderHome(
           <ul class="checklist">
             <li>Find a quiet place where you won't be interrupted. A clock tracks your time, but there's no limit.</li>
             <li>Don't use a calculator, notes, search or another person's help — it would only make the result less accurate.</li>
-            <li>Questions get harder or easier based on your answers. Expect to find many of them difficult; that is by design.</li>
+            <li>Questions get harder or easier based on your answers. Most should feel within reach, and if you miss two in a row the next one is easier.</li>
             <li>Every test is unique: questions are generated fresh each time and ones you've seen before are avoided, so retakes can't be memorised.</li>
             <li>Answer every question. If you're unsure, make your best guess — there's no penalty for taking your time.</li>
             <li>There's an untimed practice question before every section, and you can rest between sections.</li>

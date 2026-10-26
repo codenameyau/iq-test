@@ -623,7 +623,7 @@ describe('spatialGenerator', () => {
         const matches = options.map((holes) => samePoints(holes, solved.holes));
         expect(matches.filter(Boolean), item.id).toHaveLength(1);
         expect(matches[item.answer], item.id).toBe(true);
-        if (item.b > 2) {
+        if (item.b > 1.5) {
           counts.hardFold++;
           expect(solved.lines.length, item.id).toBe(3);
         }
@@ -637,5 +637,53 @@ describe('spatialGenerator', () => {
     expect(counts.hardRot).toBeGreaterThan(0);
     expect(counts.hardXform).toBeGreaterThan(0);
     expect(counts.hardFold).toBeGreaterThan(0);
+  });
+
+  function itemsAt(target: number, count: number, keep: (item: ChoiceItem) => boolean): ChoiceItem[] {
+    const items: ChoiceItem[] = [];
+    for (let seed = 1; items.length < count && seed < count * 40; seed++) {
+      const item = asChoice(spatialGenerator.generate(createRng(seed * 104729), target, new Set()));
+      if (keep(item)) items.push(item);
+    }
+    expect(items.length).toBe(count);
+    return items;
+  }
+
+  it('gives two-fold, five-option folding items a foil with the same holes count and symmetry', () => {
+    for (const item of itemsAt(0.3, 150, (candidate) => candidate.id.startsWith('sp-fold-2-'))) {
+      expect(item.options, item.id).toHaveLength(5);
+      const { lines } = foldSolution(svgOf(item.stimulus));
+      expect(lines, item.id).toHaveLength(2);
+      const key = parseHoles(svgOf(item.options[item.answer]));
+      const symmetric = (holes: Pt[]) =>
+        lines.every((line) => samePoints(holes, holes.map((hole) => reflect(hole, line))));
+      expect(symmetric(key), item.id).toBe(true);
+      const lookalikes = item.options.filter((option, index) => {
+        const holes = parseHoles(svgOf(option));
+        return index !== item.answer && holes.length === key.length && symmetric(holes);
+      });
+      expect(lookalikes.length, item.id).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('never lists a transformation that the next one undoes', () => {
+    for (const target of [0, 1.2, 2.4]) {
+      for (const item of itemsAt(target, 120, (candidate) => candidate.id.startsWith('sp-xform-'))) {
+        const ops = parseOps(item.prompt);
+        const grid = parseGrid(svgOf(item.stimulus));
+        for (let i = 1; i < ops.length; i++) {
+          expect(gridSignature(applyOps(grid, [ops[i - 1], ops[i]])), item.prompt).not.toBe(gridSignature(grid));
+        }
+      }
+    }
+  });
+
+  it('turns level-1 rotation items by angles off the quarter turns', () => {
+    for (const item of itemsAt(-0.3, 100, (candidate) => candidate.id.startsWith('sp-rot-1-'))) {
+      expect(item.b).toBe(-0.3);
+      for (const option of item.options) {
+        expect(parsePolyomino(svgOf(option)).angle % 90, item.id).not.toBe(0);
+      }
+    }
   });
 });

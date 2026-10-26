@@ -43,14 +43,20 @@ export interface RecallItem extends ItemBase {
 
 export type Item = ChoiceItem | RecallItem;
 
+/** Where the next item falls in its section: `index` of `count`, zero-based. */
+export interface ItemPosition {
+  index: number;
+  count: number;
+}
+
 export interface ItemGenerator {
   domain: Domain;
   /**
    * Returns an item whose difficulty `b` is as close as practical to `targetB`.
    * Must not return an item whose id is in `usedIds`.
-   * Must be deterministic for a given rng state, targetB and usedIds.
+   * Must be deterministic for a given rng state, targetB, usedIds and position.
    */
-  generate(rng: Rng, targetB: number, usedIds: ReadonlySet<string>): Item;
+  generate(rng: Rng, targetB: number, usedIds: ReadonlySet<string>, position?: ItemPosition): Item;
   /** A fixed, easy, untimed example shown before the section. */
   practice(): Item;
 }

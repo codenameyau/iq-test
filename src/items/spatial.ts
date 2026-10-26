@@ -45,7 +45,7 @@ const ODD_TURNS = [35, 50, 70, 110, 125, 145, 160, 200, 215, 235, 250, 290, 305,
 
 const LEVELS: Level[] = [
   { family: 'rot', id: 0, b: -2.4, a: 1.15, nMin: 5, nMax: 5, angles: 'quarter', options: 4, near: 0 },
-  { family: 'rot', id: 1, b: -0.3, a: 1.25, nMin: 6, nMax: 6, angles: 'quarter', options: 4, near: 0 },
+  { family: 'rot', id: 1, b: -0.3, a: 1.25, nMin: 6, nMax: 6, angles: 'odd', options: 4, near: 0 },
   { family: 'rot', id: 2, b: 1.1, a: 1.35, nMin: 7, nMax: 8, angles: 'odd', options: 5, near: 0 },
   { family: 'rot', id: 3, b: 2.4, a: 1.5, nMin: 9, nMax: 10, angles: 'odd', options: 5, near: 2 },
   { family: 'xform', id: 0, b: -2.2, a: 1.2, n: 3, steps: 1, options: 4 },
@@ -56,7 +56,7 @@ const LEVELS: Level[] = [
   { family: 'fold', id: 1, b: -1.2, a: 1.25, steps: 2, diagonal: false, options: 4 },
   { family: 'fold', id: 2, b: 0.3, a: 1.3, steps: 2, diagonal: false, options: 5 },
   { family: 'fold', id: 3, b: 1.4, a: 1.4, steps: 3, diagonal: true, options: 4 },
-  { family: 'fold', id: 4, b: 2.4, a: 1.5, steps: 3, diagonal: true, options: 5 },
+  { family: 'fold', id: 4, b: 1.8, a: 1.5, steps: 3, diagonal: true, options: 5 },
 ];
 
 const QUESTION_FAMILY = {
@@ -567,7 +567,9 @@ function randomFigure(rng: Rng, n: number): CellState[][] | null {
 function chooseOps(rng: Rng, n: number, count: number): Op[] | null {
   for (let attempt = 0; attempt < 30; attempt++) {
     const ops = Array.from({ length: count }, () => rng.pick(OPS));
-    if (count === 1 || !transformsToIdentity(n, ops)) return ops;
+    // A step undone by the next one leaves fewer transformations than the level counts.
+    const cancels = ops.some((op, index) => index > 0 && transformsToIdentity(n, [ops[index - 1], op]));
+    if (count === 1 || (!cancels && !transformsToIdentity(n, ops))) return ops;
   }
   return null;
 }
@@ -845,7 +847,14 @@ function planFolds(rng: Rng, steps: number, diagonal: boolean): FoldPlan | null 
   return { lines, steps: drawn, finalPacket, punches };
 }
 
-function foldDistractors(rng: Rng, holes: Pt[], punch: Pt, lines: Line[], count: number): Pt[][] | null {
+interface FoldDistractors {
+  options: Pt[][];
+  /** The fourth foil leaves the last fold closed instead of punching a different spot. */
+  closedFold: boolean;
+}
+
+function foldDistractors(rng: Rng, holes: Pt[], punch: Pt, plan: FoldPlan, count: number): FoldDistractors | null {
+  const lines = plan.lines;
   const used = new Set<string>([pointSetKey(holes)]);
   const chosen: Pt[][] = [];
   const holeKeys = new Set(holes.map(pointKey));
@@ -861,11 +870,16 @@ function foldDistractors(rng: Rng, holes: Pt[], punch: Pt, lines: Line[], count:
   if (destinations.length === 0) return null;
   const moved = holes.filter((point) => pointKey(point) !== pointKey(movedFrom)).concat(rng.pick(destinations));
   if (!take(moved)) return null;
-  if (chosen.length === count) return chosen;
+  if (chosen.length === count) return { options: chosen, closedFold: false };
 
+  // Same hole count and symmetry as the key, so only the punch position gives it away.
+  const elsewhere = rng.shuffle(plan.punches.filter((point) => pointKey(point) !== pointKey(punch)));
+  for (const other of elsewhere) {
+    if (take(unfold(other, lines))) return chosen.length === count ? { options: chosen, closedFold: false } : null;
+  }
   const partial = unfold(punch, lines.slice(0, -1));
   if (!take(partial)) return null;
-  return chosen.length === count ? chosen : null;
+  return chosen.length === count ? { options: chosen, closedFold: true } : null;
 
   function take(points: Pt[]): boolean {
     if (!separated(points) || !points.every(onInnerLattice)) return false;
@@ -953,17 +967,19 @@ function buildFold(rng: Rng, level: FoldLevel): ChoiceItem | null {
   if (!plan) return null;
   const punch = rng.pick(plan.punches);
   const holes = unfold(punch, plan.lines);
-  const distractors = foldDistractors(rng, holes, punch, plan.lines, level.options - 1);
+  const distractors = foldDistractors(rng, holes, punch, plan, level.options - 1);
   if (!distractors) return null;
-  const answer = rng.int(0, distractors.length);
-  const optionPoints = distractors.slice();
+  const answer = rng.int(0, distractors.options.length);
+  const optionPoints = distractors.options.slice();
   optionPoints.splice(answer, 0, sortPoints(holes));
   const keys = optionPoints.map(pointSetKey);
   if (new Set(keys).size !== keys.length) return null;
-  const closedFold = level.options === 5;
-  const other = closedFold
-    ? 'The other options omit a hole, add a hole, move one, or leave a fold closed.'
-    : 'The other options omit a hole, add a hole, or move one.';
+  let other = 'The other options omit a hole, add a hole, or move one.';
+  if (level.options === 5) {
+    other = distractors.closedFold
+      ? 'The other options omit a hole, add a hole, move one, or leave a fold closed.'
+      : 'The other options omit a hole, add a hole, move one, or show a punch in a different spot.';
+  }
   return {
     kind: 'choice',
     id: `sp-fold-${level.id}-${plan.lines.map(lineKey).join('.')}-p${pointKey(punch)}-${keys.join('~')}`,

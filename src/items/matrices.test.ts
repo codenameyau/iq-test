@@ -55,6 +55,62 @@ function agreementPick(vectors: string[][]): number {
   return best;
 }
 
+type Sample = ReturnType<typeof generateMatrices>;
+type Panel = Sample['options'][number];
+
+const SYMMETRY: Record<string, number> = { triangle: 120, square: 90, pentagon: 72, hexagon: 60, circle: 0 };
+const COMPONENTS = ['single', 'outer', 'inner', 'left', 'right', 'accent'] as const;
+const ATTRIBUTES = ['shape', 'size', 'fill', 'count', 'rotation'] as const;
+
+function figureOf(panel: Panel, component: string) {
+  if (panel.kind === 'lines') return component === 'accent' ? panel.accent : null;
+  if (component === 'accent') return null;
+  if (component === 'single') return panel.layout === 'single' ? panel.outer : null;
+  if (component === 'outer') return panel.layout === 'nested' ? panel.outer : null;
+  if (component === 'left') return panel.layout === 'split' ? panel.outer : null;
+  if (component === 'inner') return panel.layout === 'nested' ? panel.inner ?? null : null;
+  return panel.layout === 'split' ? panel.inner ?? null : null;
+}
+
+/** Degrees two orientations of a shape appear apart, after its rotational symmetry. */
+function apparentTurn(shape: string, a: number, b: number): number {
+  const period = SYMMETRY[shape];
+  if (!period) return 0;
+  const turn = (((a - b) % period) + period) % period;
+  return Math.min(turn, period - turn);
+}
+
+/** Missing-cell values allowed by constant, progression, distribution, or arithmetic readings by rows or columns. */
+function independentReadings(grid: number[][], arithmetic: boolean): Set<number> {
+  const out = new Set<number>();
+  const columns = [0, 1, 2].map((col) => grid.map((row) => row[col]));
+  for (const [r0, r1, r2] of [grid, columns]) {
+    if (r0.every((v) => v === r0[0]) && r1.every((v) => v === r1[0]) && r2[0] === r2[1]) out.add(r2[0]);
+    const step = r0[1] - r0[0];
+    if ([r0, r1].every((r) => r[1] - r[0] === step && r[2] - r[1] === step) && r2[1] - r2[0] === step) out.add(r2[1] + step);
+    const key = (r: number[]) => [...r].sort((x, y) => x - y).join();
+    if (new Set(r0).size === 3 && key(r0) === key(r1)) {
+      const missing = r0.filter((v) => v !== r2[0] && v !== r2[1]);
+      if (missing.length === 1) out.add(missing[0]);
+    }
+    if (arithmetic && [r0, r1].every((r) => r[2] === r[0] + r[1])) out.add(r2[0] + r2[1]);
+    if (arithmetic && [r0, r1].every((r) => r[2] === r[0] - r[1])) out.add(r2[0] - r2[1]);
+  }
+  return out;
+}
+
+const LINE_OPS: Array<(a: number, b: number) => number> = [
+  (a, b) => a | b,
+  (a, b) => a ^ b,
+  (a, b) => a & b,
+  (a, b) => a & ~b,
+  (a, b) => b & ~a,
+];
+
+function nonFixedRules(sample: Sample) {
+  return sample.rules.filter((rule) => rule.kind !== 'fixed');
+}
+
 describe('matrices generator', () => {
   it('exposes the matrices domain', () => {
     expect(matricesGenerator.domain).toBe('matrices');
@@ -266,6 +322,78 @@ describe('matrices generator', () => {
     }
     expect(sawConstant).toBe(true);
     expect(sawCrowdedShapes).toBe(true);
+  });
+
+  it('draws every orientation change at least 30° apart once shape symmetry is removed', () => {
+    const rng = createRng(3030);
+    let sawRotationRule = false;
+    for (let i = 0; i < 600; i++) {
+      const sample = generateMatrices(rng, LEVEL_B[i % LEVEL_B.length], new Set());
+      if (sample.rules.some((rule) => rule.kind === 'progression' && rule.attr === 'rotation')) sawRotationRule = true;
+      const panels = [...sample.context.flat().slice(0, 8), ...sample.options];
+      for (const component of COMPONENTS) {
+        const figures = panels.map((panel) => figureOf(panel, component)).filter((fig) => fig !== null);
+        for (let a = 0; a < figures.length; a++) {
+          for (let b = a + 1; b < figures.length; b++) {
+            const [left, right] = [figures[a], figures[b]];
+            if (!left || !right || left.shape !== right.shape || left.rotation === right.rotation) continue;
+            expect(apparentTurn(left.shape, left.rotation, right.rotation), `${sample.item.id} ${component}`).toBeGreaterThanOrEqual(30);
+          }
+        }
+      }
+    }
+    expect(sawRotationRule).toBe(true);
+  });
+
+  it('admits one value per attribute and one line operation under every standard reading', () => {
+    const rng = createRng(6060);
+    for (let i = 0; i < 1000; i++) {
+      const sample = generateMatrices(rng, LEVEL_B[i % LEVEL_B.length], new Set());
+      const correct = sample.context[2][2];
+      if (correct.kind === 'lines') {
+        const masks = sample.context.map((row) => row.map((panel) => (panel.kind === 'lines' ? panel.mask : -1)));
+        const fitting = new Set(
+          LINE_OPS.filter((op) => [0, 1].every((row) => masks[row][2] === op(masks[row][0], masks[row][1])))
+            .map((op) => op(masks[2][0], masks[2][1])),
+        );
+        expect([...fitting], sample.item.id).toEqual([correct.mask]);
+      }
+      for (const component of COMPONENTS) {
+        if (!figureOf(correct, component)) continue;
+        for (const attr of ATTRIBUTES) {
+          const grid = sample.context.map((row) => row.map((panel) => attributeAt(panel, component, attr)));
+          const readings = independentReadings(grid, attr !== 'shape');
+          expect([...readings], `${sample.item.id} ${component}.${attr}`).toEqual([grid[2][2]]);
+        }
+      }
+    }
+  });
+
+  it('shows every planned rule, with count arithmetic alone only at level 4', () => {
+    const minimumRules: Record<number, number> = { 1: 1, 2: 1, 3: 2, 4: 1, 5: 2, 6: 1, 7: 3, 8: 3, 9: 2, 10: 6 };
+    const rng = createRng(8080);
+    let sawLoneArithmetic = false;
+    for (let i = 0; i < 600; i++) {
+      const sample = generateMatrices(rng, LEVEL_B[i % LEVEL_B.length], new Set());
+      const level = Number(sample.item.id.split('-')[1]);
+      const rules = nonFixedRules(sample);
+      expect(rules.length, sample.item.id).toBeGreaterThanOrEqual(minimumRules[level]);
+      if (rules.length === 1 && rules[0].kind === 'arithmetic') {
+        sawLoneArithmetic = true;
+        expect(level, sample.item.id).toBe(4);
+      }
+    }
+    expect(sawLoneArithmetic).toBe(true);
+  });
+
+  it('falls back to the nearest free level, not the lowest one', () => {
+    const blocked = new Set(['mx-10-', 'mx-9-', 'mx-8-']);
+    const usedIds = { has: (id: string) => [...blocked].some((prefix) => id.startsWith(prefix)) } as ReadonlySet<string>;
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const sample = generateMatrices(createRng(seed), 2.7, usedIds);
+      expect(sample.item.id.startsWith('mx-7-'), sample.item.id).toBe(true);
+      expect(sample.item.b).toBe(1.2);
+    }
   });
 
   it('returns one fixed easy practice item', () => {

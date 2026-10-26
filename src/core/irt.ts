@@ -52,12 +52,10 @@ export function estimateAbility(
   return { theta: mean, se: Math.sqrt(variance / total) };
 }
 
-/**
- * Difficulty that maximises 3PL Fisher information at `theta`
- * (slightly above theta when guessing is possible).
- */
-export function optimalDifficulty(theta: number, a: number, c: number): number {
-  return theta + Math.log((1 + Math.sqrt(1 + 8 * c)) / 2) / a;
+/** Difficulty at which someone of ability `theta` answers correctly with probability `success`. */
+export function difficultyForSuccess(theta: number, a: number, c: number, success: number): number {
+  const q = (Math.max(success, c + 0.01) - c) / (1 - c);
+  return theta - Math.log(q / (1 - q)) / a;
 }
 
 /**

@@ -107,7 +107,8 @@ describe('verbal bank', () => {
         }
       }
       if (item.id.startsWith(TYPE_PREFIX.vo)) {
-        const match = item.stimulus.match(/^Which word is closest in meaning to ([A-Z]{3,})\?$/);
+        const match = item.stimulus.match(/^([A-Z]{3,})$/);
+        expect(item.prompt).toBe('Choose the option closest in meaning to this word.');
         expect(match, item.id).not.toBeNull();
         const target = match?.[1] ?? '';
         for (const option of item.options) {
@@ -121,8 +122,16 @@ describe('verbal bank', () => {
       }
       if (item.id.startsWith(TYPE_PREFIX.si)) {
         expect(item.stimulus.startsWith('In what way are ')).toBe(true);
-        expect(item.prompt).toBe('Choose the best answer.');
+        expect(item.prompt).toBe('Choose the most important way they are alike, not a surface detail.');
       }
+    }
+  });
+
+  it('avoids spellings that differ between British and American English', () => {
+    const regional = /COLOU?R|FLAVOU?R|SULPHUR|ALUMINIUM|METRE|TYRE|SCEPTIC|SKEPTIC|TRAVELL|CATALOGUE|PLOUGH|\bPLOW\b|LITRE/;
+    for (const item of verbalBank) {
+      expect(item.stimulus.toUpperCase(), item.id).not.toMatch(regional);
+      for (const option of item.options) expect(option.toUpperCase(), item.id).not.toMatch(regional);
     }
   });
 });
@@ -332,7 +341,11 @@ function expectOrderValid(built: OrderBuilt): void {
   const keyed = built.options[item.answer];
   expect(keyed).toBeDefined();
   if (!keyed) return;
-  const banned = bannedOrderText(visualText(item.stimulus));
+  const stimulus = visualText(item.stimulus);
+  if (/sits to the (left|right) of/.test(stimulus)) {
+    expect(stimulus.startsWith('Everyone named below sits in one straight row.'), stimulus).toBe(true);
+  }
+  const banned = bannedOrderText(stimulus);
   for (const option of built.options) expect(banned.has(option.text), option.text).toBe(false);
   const holds = (pair: readonly [string, string]): boolean => (at.get(pair[0]) ?? 0) < (at.get(pair[1]) ?? 0);
   if (built.question === 'who') {
@@ -390,6 +403,35 @@ function isQuantifierShift(
   return false;
 }
 
+/** Readers assume every named group has members; the key must not change under that reading. */
+function expectSameKeyWhenEveryGroupExists(built: SyllogismBuilt, answer: number): void {
+  const typeCount = 1 << built.k;
+  let models = 0;
+  const hits = built.options.map(() => 0);
+  for (let bits = 0; bits < 1 << typeCount; bits += 1) {
+    const present = new Uint8Array(typeCount);
+    for (let type = 0; type < typeCount; type += 1) {
+      if ((bits & (1 << type)) !== 0) present[type] = 1;
+    }
+    let everyGroup = true;
+    for (let group = 0; group < built.k; group += 1) {
+      if (!present.some((on, type) => on === 1 && (type & (1 << group)) !== 0)) everyGroup = false;
+    }
+    if (!everyGroup || !built.premises.every((premise) => statementHolds(present, premise))) continue;
+    models += 1;
+    built.options.forEach((stmt, index) => {
+      if (statementHolds(present, stmt)) hits[index] = (hits[index] ?? 0) + 1;
+    });
+  }
+  expect(models).toBeGreaterThan(0);
+  hits.forEach((count, index) => {
+    const isKey = index === answer;
+    if (built.ask === 'must') expect(count === models, `option ${index}`).toBe(isKey);
+    else if (built.ask === 'could') expect(isKey ? count > 0 && count < models : count === 0, `option ${index}`).toBe(true);
+    else expect(count === 0, `option ${index}`).toBe(isKey);
+  });
+}
+
 function expectSyllogismValid(built: SyllogismBuilt): void {
   const item = asChoice(built.item);
   expect(item.id).toMatch(/^vb-gen-syl-[0-9a-z]+$/);
@@ -436,6 +478,24 @@ function expectSyllogismValid(built: SyllogismBuilt): void {
     distractorHits.forEach((hits, index) => {
       if (index !== item.answer) expect(hits).toBeGreaterThan(0);
     });
+  }
+  expectSameKeyWhenEveryGroupExists(built, item.answer);
+  if (built.ask === 'must') {
+    for (const premise of built.premises) {
+      const implied =
+        premise.q === 'some'
+          ? [{ q: 'some-not', s: premise.s, p: premise.p }]
+          : premise.q === 'some-not'
+            ? [
+                { q: 'some', s: premise.s, p: premise.p },
+                { q: 'some', s: premise.p, p: premise.s },
+              ]
+            : [];
+      built.options.forEach((option, index) => {
+        if (index === item.answer) return;
+        for (const reading of implied) expect(sameStmt(option, reading), item.id).toBe(false);
+      });
+    }
   }
   if (item.b >= 1) {
     const sources = [...built.premises, key];

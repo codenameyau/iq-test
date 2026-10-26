@@ -1,7 +1,7 @@
 import { sectionsFor, type ModeId } from './config';
-import { estimateAbility, optimalDifficulty, type ScoredResponse } from './irt';
+import { difficultyForSuccess, estimateAbility, type ScoredResponse } from './irt';
 import { createRng, hashSeed, type Rng } from './rng';
-import type { Domain, Item, ItemGenerator } from './types';
+import type { Domain, Item, ItemGenerator, ItemPosition } from './types';
 import type { ParticipantInfo } from './participant';
 import { matricesGenerator } from '../items/matrices';
 import { memoryGenerator, normalizeRecall } from '../items/memory';
@@ -26,8 +26,14 @@ const TARGET_GUESSING: Record<Domain, number> = {
   memory: 0,
 };
 const TARGET_DISCRIMINATION = 1.4;
-/** Each section opens below the current estimate so people settle in with a solvable item. */
-const WARM_UP_OFFSET = -0.8;
+/**
+ * Chance of answering correctly that each question is aimed at. Maximum-information targeting
+ * (~55%) leaves people failing long runs of questions; ~70% costs little precision and keeps
+ * the test feeling fair.
+ */
+const TARGET_SUCCESS = 0.7;
+/** Section openers and the question after two misses in a row are aimed at this easier level. */
+const EASY_SUCCESS = 0.85;
 
 export interface ResponseRecord {
   item: Item;
@@ -184,34 +190,41 @@ function drawNextItem(session: Session): void {
   const section = currentSection(session);
   const rng = createRng(hashSeed(session.seed, section.domain, session.draws++));
   const jitter = (rng.next() - 0.5) * 0.4;
-  const target = nextTarget(session, section, section.responses.length === 0) + jitter;
-  section.current = { item: pickItem(GENERATORS[section.domain], rng, target, session), elapsedMs: 0 };
+  const target = nextTarget(session, section) + jitter;
+  const position = { index: section.responses.length, count: section.items };
+  section.current = { item: pickItem(GENERATORS[section.domain], rng, target, session, position), elapsedMs: 0 };
 }
 
 /** Max distance from the target difficulty we accept in order to avoid a previously seen item. */
 const FRESH_ITEM_TOLERANCE = 0.75;
 
-function pickItem(generator: ItemGenerator, rng: Rng, target: number, session: Session): Item {
+function pickItem(generator: ItemGenerator, rng: Rng, target: number, session: Session, position: ItemPosition): Item {
   const sessionIds = usedIds(session);
   const freshIds = new Set([...sessionIds, ...session.priorSeenIds]);
   try {
-    const fresh = generator.generate(rng, target, freshIds);
+    const fresh = generator.generate(rng, target, freshIds, position);
     if (Math.abs(fresh.b - target) <= FRESH_ITEM_TOLERANCE) return fresh;
   } catch {
     // Every nearby item was seen in an earlier test; fall back to session-only avoidance.
   }
-  return generator.generate(rng, target, sessionIds);
+  return generator.generate(rng, target, sessionIds, position);
 }
 
 export function shownItemIds(session: Session): string[] {
   return [...usedIds(session)];
 }
 
-function nextTarget(session: Session, section: SectionState, warmUp: boolean): number {
+function nextTarget(session: Session, section: SectionState): number {
   const overall = estimateAbility(scoredResponses(session.sections));
-  if (warmUp) return overall.theta + WARM_UP_OFFSET;
   const own = estimateAbility(section.responses.map(toScored), { mean: overall.theta, sd: 1 });
-  return optimalDifficulty(own.theta, TARGET_DISCRIMINATION, TARGET_GUESSING[section.domain]);
+  const recent = section.responses.slice(-2);
+  const easier = section.responses.length === 0 || (recent.length === 2 && recent.every((r) => !r.correct));
+  return difficultyForSuccess(
+    own.theta,
+    TARGET_DISCRIMINATION,
+    TARGET_GUESSING[section.domain],
+    easier ? EASY_SUCCESS : TARGET_SUCCESS,
+  );
 }
 
 function usedIds(session: Session): Set<string> {

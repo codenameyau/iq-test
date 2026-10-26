@@ -13,7 +13,7 @@ const SERIES_B = {
   'minus-or-double': -1.8,
   'increasing-diff': -1.1,
   'times3-square-alt': -0.6,
-  interleaved: 0,
+  interleaved: 0.3,
   'second-diff': 0.4,
   'alt-ops': 0.8,
   fibonacci: 0.9,
@@ -28,7 +28,7 @@ const MATRIX_B = {
   'row-product': -0.4,
   'row-double-sum': 0.3,
   'row-mul-minus': 0.6,
-  'row-col-arith': 1.3,
+  'row-col-arith': -1.6,
   'row-col-combo': 2.0,
 } as const;
 
@@ -501,6 +501,120 @@ function allFamilyNames(kind: 'series' | 'matrix'): string[] {
   return Object.keys(kind === 'matrix' ? MATRIX_B : SERIES_B);
 }
 
+type Alternative = { name: string; plain: boolean; next: (terms: number[]) => number | null };
+
+function nextByConstantDifferences(terms: number[], order: number): number | null {
+  const levels = [terms];
+  for (let i = 0; i < order; i++) levels.push(differences(levels[i]));
+  const deepest = levels[order];
+  if (deepest.length < 2 || deepest.some((value) => value !== deepest[0])) return null;
+  return levels.reduce((sum, level) => sum + level[level.length - 1], 0);
+}
+
+function strands(terms: number[]): [number[], number[]] {
+  return [terms.filter((_, i) => i % 2 === 0), terms.filter((_, i) => i % 2 === 1)];
+}
+
+/** Simple rules a test-taker might fit instead of the family rule. `plain` ones must never disagree with the key. */
+const SERIES_ALTERNATIVES: Alternative[] = [
+  { name: 'constant difference', plain: true, next: (t) => nextByConstantDifferences(t, 1) },
+  { name: 'constant second difference', plain: true, next: (t) => nextByConstantDifferences(t, 2) },
+  {
+    name: 'constant ratio',
+    plain: true,
+    next: (t) => {
+      if (t.some((term) => term === 0)) return null;
+      const ratio = t[1] / t[0];
+      if (t.some((term, i) => i > 0 && Math.abs(term / t[i - 1] - ratio) > 1e-9)) return null;
+      return t[t.length - 1] * ratio;
+    },
+  },
+  {
+    name: 'two interleaved arithmetic sequences',
+    plain: true,
+    next: (t) => {
+      const [even, odd] = strands(t);
+      if (even.length < 3 || odd.length < 3) return null;
+      const evenStep = constantDifference(even);
+      const oddStep = constantDifference(odd);
+      if (evenStep === null || oddStep === null) return null;
+      return t.length % 2 === 0 ? even[even.length - 1] + evenStep : odd[odd.length - 1] + oddStep;
+    },
+  },
+  {
+    name: 'two interleaved arithmetic sequences, one only two terms long',
+    plain: false,
+    next: (t) => {
+      const [even, odd] = strands(t);
+      const evenStep = constantDifference(even);
+      const oddStep = constantDifference(odd);
+      if (evenStep === null || oddStep === null) return null;
+      return t.length % 2 === 0 ? even[even.length - 1] + evenStep : odd[odd.length - 1] + oddStep;
+    },
+  },
+  {
+    name: 'Fibonacci-like',
+    plain: true,
+    next: (t) => (t.every((term, i) => i < 2 || term === t[i - 1] + t[i - 2]) ? t[t.length - 1] + t[t.length - 2] : null),
+  },
+  {
+    name: 'alternating two additions',
+    plain: true,
+    next: (t) => {
+      const diffs = differences(t);
+      if (diffs.length < 4 || diffs.some((diff, i) => i >= 2 && diff !== diffs[i - 2])) return null;
+      return t[t.length - 1] + diffs[diffs.length - 2];
+    },
+  },
+  ...[2, 3].flatMap((factor) =>
+    [0, 1].map((phase): Alternative => ({
+      name: `alternating ×${factor} and an addition`,
+      plain: false,
+      next: (t) => {
+        let addend: number | null = null;
+        for (let i = 1; i < t.length; i++) {
+          if ((i + phase) % 2 === 1) {
+            if (t[i] !== t[i - 1] * factor) return null;
+          } else {
+            addend ??= t[i] - t[i - 1];
+            if (t[i] !== t[i - 1] + addend) return null;
+          }
+        }
+        if (addend === null) return null;
+        return (t.length + phase) % 2 === 1 ? t[t.length - 1] * factor : t[t.length - 1] + addend;
+      },
+    })),
+  ),
+];
+
+const CELL_OPERATIONS: Array<[string, (x: number, y: number) => number]> = [
+  ['sum', (x, y) => x + y],
+  ['product', (x, y) => x * y],
+  ['difference', (x, y) => x - y],
+  ['reverse difference', (x, y) => y - x],
+  ['double sum', (x, y) => 2 * (x + y)],
+  ['product minus first', (x, y) => x * y - x],
+  ['product minus second', (x, y) => x * y - y],
+];
+
+const MATRIX_ALTERNATIVES: Alternative[] = [
+  ...CELL_OPERATIONS.flatMap(([name, op]): Alternative[] => [
+    { name: `row ${name}`, plain: true, next: ([a, b, c, d, e, f, g, h]) => (c === op(a, b) && f === op(d, e) ? op(g, h) : null) },
+    { name: `column ${name}`, plain: true, next: ([a, b, c, d, e, f, g, h]) => (g === op(a, d) && h === op(b, e) ? op(c, f) : null) },
+  ]),
+  { name: 'rows step evenly', plain: true, next: ([a, b, c, d, e, f, g, h]) => (b - a === c - b && e - d === f - e ? 2 * h - g : null) },
+  { name: 'columns step evenly', plain: true, next: ([a, b, c, d, e, f, g, h]) => (d - a === g - d && e - b === h - e ? 2 * f - c : null) },
+];
+
+function familyItems(name: string, count: number): ChoiceItem[] {
+  const items: ChoiceItem[] = [];
+  for (let seed = 1; items.length < count && seed < count * 20; seed++) {
+    const item = asChoice(seriesGenerator.generate(createRng(seed * 7919), FAMILY_B[name], new Set()));
+    if (parseId(item.id).name === name) items.push(item);
+  }
+  return items;
+}
+
 describe('seriesGenerator', () => {
   it('exposes the series domain', () => {
     expect(seriesGenerator.domain).toBe('series');
@@ -676,6 +790,39 @@ describe('seriesGenerator', () => {
         expect(byTen || (low <= 9 && high <= 99), item.explanation).toBe(true);
       }
       expect(item.family, item.id).toBe(familyKind(name) === 'matrix' ? 'ns-matrix' : 'ns-series');
+    }
+  });
+
+  it('has no second answer under simple alternative rules, in 200 items per family', () => {
+    for (const name of Object.keys(FAMILY_B)) {
+      const items = familyItems(name, 200);
+      expect(items.length, name).toBe(200);
+      const alternatives = familyKind(name) === 'matrix' ? MATRIX_ALTERNATIVES : SERIES_ALTERNATIVES;
+      for (const item of items) {
+        const texts = optionTexts(item);
+        const answer = Number(texts[item.answer]);
+        const { terms } = parseId(item.id);
+        for (const alternative of alternatives) {
+          const value = alternative.next(terms);
+          if (value === null || value === answer || value < 0) continue;
+          expect(alternative.plain, `${item.id}: ${alternative.name} gives ${value}`).toBe(false);
+          expect(texts, `${item.id}: distractor ${value} follows ${alternative.name}`).not.toContain(String(value));
+        }
+      }
+    }
+  });
+
+  it('shows the rule at least twice and never as a repeating pair or a counting grid', () => {
+    for (const name of Object.keys(FAMILY_B)) {
+      for (const item of familyItems(name, 100)) {
+        const { terms } = parseId(item.id);
+        if (familyKind(name) === 'matrix') {
+          expect(terms.slice(0, 3), `${item.id} repeats its first row`).not.toEqual(terms.slice(3, 6));
+          expect(constantDifference(terms), `${item.id} counts in reading order`).toBeNull();
+        } else {
+          expect(terms.every((term, i) => i < 2 || term === terms[i - 2]), `${item.id} only alternates two values`).toBe(false);
+        }
+      }
     }
   });
 });

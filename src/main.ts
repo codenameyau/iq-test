@@ -2,13 +2,15 @@ import './styles.css';
 import {
   createSession,
   resumeAfterReload,
+  setParticipant,
   shownItemIds,
   startSection,
   submitAnswer,
   tick,
   type Session,
 } from './core/engine';
-import { buildReport } from './core/scoring';
+import { buildFormBody, getPublicIP, submitToForm } from './core/google-form';
+import { buildReport, MEASUREMENT_CEILING } from './core/scoring';
 import {
   clearHistory,
   clearSession,
@@ -19,7 +21,9 @@ import {
   rememberSeenIds,
   saveSession,
 } from './core/storage';
+import { formatClock } from './ui/dom';
 import { renderHome } from './ui/home';
+import { renderIntake } from './ui/intake';
 import { renderResults } from './ui/results';
 import { renderActiveItem, renderSectionIntro, totalElapsed, type TestView } from './ui/test';
 
@@ -50,7 +54,8 @@ function render(): void {
       showActiveItem(session);
       break;
     case 'done':
-      showResults(session);
+      if (session.participant) showResults(session);
+      else showIntake(session);
       break;
   }
 }
@@ -89,6 +94,33 @@ function showActiveItem(s: Session): void {
   });
   teardown = view.destroy;
   startClock(s, view);
+}
+
+function showIntake(s: Session): void {
+  renderIntake(root, async (contact) => {
+    const ip = await getPublicIP();
+    const report = buildReport(s);
+    const shown = report.fsiq > MEASUREMENT_CEILING ? `${MEASUREMENT_CEILING}+` : String(report.fsiq);
+    await submitToForm(buildFormBody({
+      fullName: contact.fullName,
+      email: contact.email,
+      phone: contact.phone,
+      ip,
+      mode: s.mode,
+      timeTaken: formatClock(totalElapsed(s)),
+      iqResult: shown,
+    }));
+    setParticipant(s, {
+      ...contact,
+      dob: '',
+      country: '',
+      countryOfBirth: '',
+      postalCode: '',
+      submittedAt: Date.now(),
+    });
+    persist();
+    showResults(s);
+  });
 }
 
 function showResults(s: Session): void {

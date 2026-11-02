@@ -170,6 +170,26 @@ function validateCountry(input: string, label: string): { ok: boolean; value: st
   return { ok: true, value };
 }
 
+/** The three fields the results form asks for. Other details are filled in automatically. */
+export function validateContact(draft: { fullName: string; email: string; phone: string }): {
+  ok: boolean;
+  errors: Partial<Record<'fullName' | 'email' | 'phone', string>>;
+  values: { fullName: string; email: string; phone: string };
+} {
+  const name = validateName(draft.fullName);
+  const email = validateEmail(draft.email);
+  const phone = validatePhone(draft.phone);
+  const errors: Partial<Record<'fullName' | 'email' | 'phone', string>> = {};
+  if (!name.ok) errors.fullName = name.error;
+  if (!email.ok) errors.email = email.error;
+  if (!phone.ok) errors.phone = phone.error;
+  return {
+    ok: Object.keys(errors).length === 0,
+    errors,
+    values: { fullName: name.value, email: email.value, phone: phone.value },
+  };
+}
+
 export function validateParticipant(draft: ParticipantDraft): ValidationResult {
   const name = validateName(draft.fullName);
   const dob = validateDob(draft.dob);

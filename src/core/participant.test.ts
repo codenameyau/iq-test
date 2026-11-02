@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { ageMeanTheta, hasReliableAgeNorm } from './age';
-import { ageFromDob, validateEmail, validateParticipant, validatePhone } from './participant';
+import { ageFromDob, validateContact, validateEmail, validateParticipant, validatePhone } from './participant';
 
 describe('email validation', () => {
   it('accepts real addresses', () => {
@@ -39,6 +39,19 @@ describe('age from dob', () => {
     expect(ageFromDob('2000-06-16')).toBe(25);
     expect(ageFromDob('2030-01-01')).toBe(null);
     expect(ageFromDob('bad')).toBe(null);
+  });
+});
+
+describe('contact form', () => {
+  it('accepts a name, email and phone and reports each problem', () => {
+    const ok = validateContact({ fullName: 'Ada Lovelace', email: 'ada@proton.me', phone: '+1 555 234 5678' });
+    expect(ok.ok).toBe(true);
+    expect(ok.values.phone).toBe('+15552345678');
+    const bad = validateContact({ fullName: 'A', email: 'nope', phone: '123' });
+    expect(bad.ok).toBe(false);
+    expect(bad.errors.fullName).toBeTruthy();
+    expect(bad.errors.email).toBeTruthy();
+    expect(bad.errors.phone).toBeTruthy();
   });
 });
 

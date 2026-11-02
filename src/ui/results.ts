@@ -103,7 +103,7 @@ export function renderResults(root: HTMLElement, report: Report, handlers: Resul
 
       <section class="card prose">
         <h2 class="card-title">How your score was calculated</h2>
-        <p><strong>Adaptive testing.</strong> This test uses computerised adaptive testing, the method behind the GRE and GMAT. After every answer your ability estimate is updated, and the next question is generated close to the difficulty where it gives the most information about you. That's why most people find many questions hard: the test keeps working at the edge of your ability.</p>
+        <p><strong>Adaptive testing.</strong> This test uses computerised adaptive testing, the method behind the GRE and GMAT. After every answer your ability estimate is updated, and the next question is aimed where most people at your level can answer it. After two misses in a row, the next one is easier.</p>
         <p><strong>Item response theory.</strong> Each question has a difficulty, a discrimination (how sharply it separates people above and below its level) and a guessing floor (e.g. 1 in 8 for an eight-option matrix). Your answers are combined using a three-parameter logistic model and an expected a posteriori (Bayesian) estimate, which accounts for which questions you got right, not just how many. Getting a hard question right counts for more than an easy one; lucky guesses on multiple choice count for less.</p>
         <p><strong>Scaling.</strong> Ability estimates are expressed on the standard IQ scale (mean 100, standard deviation 15). The Bayesian estimate gently pulls very short or very extreme results toward the average — this is deliberate, and corrects for the fact that extreme results on short tests are partly luck.</p>
         <p><strong>Age.</strong> ${report.ageNormed ? 'Your date of birth is used to compare you with people your own age, exactly as the WAIS and Stanford-Binet do. Fluid reasoning, working memory, quantitative and spatial ability peak in the early-to-mid twenties and decline gradually with age, while verbal ability keeps rising into middle age.' : 'This score uses adult norms (mean 100, SD 15) and is not adjusted for age.'}</p>
@@ -134,7 +134,7 @@ export function renderResults(root: HTMLElement, report: Report, handlers: Resul
         <button class="btn btn--ghost" id="print-bottom">Save as PDF</button>
         <button class="btn btn--primary" id="new-test">Take another test</button>
       </div>
-      <p class="footnote">This result stays on this device. Nothing is sent to a server. Generated ${new Date().toLocaleString()}.</p>
+      <p class="footnote">A copy of this result was sent with the details you entered. Generated ${new Date().toLocaleString()}.</p>
     </main>`;
 
   const print = () => {
